@@ -127,7 +127,8 @@ static const WinMenuKeyDefinition winKeyDefs[] =
 	{ VK_U,       IDM_EDIT_SENTENCECASE_BLEND,                  true,  true,  true,  nullptr },
 	{ VK_NULL,    IDM_EDIT_INVERTCASE,                          false, false, false, nullptr },
 	{ VK_NULL,    IDM_EDIT_RANDOMCASE,                          false, false, false, nullptr },
-	{ VK_NULL,    IDM_EDIT_REMOVE_DUP_LINES,                    false, false, false, nullptr },
+	{ VK_NULL,    IDM_EDIT_REMOVE_CONSECUTIVE_DUP_LINES,        false, false, false, nullptr },
+	{ VK_NULL,    IDM_EDIT_REMOVE_ANY_DUP_LINES,                false, false, false, nullptr },
 	{ VK_I,       IDM_EDIT_SPLIT_LINES,                         true,  false, false, nullptr },
 	{ VK_J,       IDM_EDIT_JOIN_LINES,                          true,  false, false, nullptr },
 	{ VK_UP,      IDM_EDIT_LINE_UP,                             true,  false, true,  nullptr },
@@ -138,6 +139,8 @@ static const WinMenuKeyDefinition winKeyDefs[] =
 	{ VK_RETURN,  IDM_EDIT_BLANKLINEBELOWCURRENT,               true,  true,  true,  nullptr },
 	{ VK_NULL,    IDM_EDIT_SORTLINES_LEXICOGRAPHIC_ASCENDING,   false, false, false, nullptr },
 	{ VK_NULL,    IDM_EDIT_SORTLINES_LEXICOGRAPHIC_DESCENDING,  false, false, false, nullptr },
+	{ VK_NULL,    IDM_EDIT_SORTLINES_LEXICO_CASE_INSENS_ASCENDING,   false, false, false, nullptr },
+	{ VK_NULL,    IDM_EDIT_SORTLINES_LEXICO_CASE_INSENS_DESCENDING,  false, false, false, nullptr },
 	{ VK_NULL,    IDM_EDIT_SORTLINES_INTEGER_ASCENDING,         false, false, false, nullptr },
 	{ VK_NULL,    IDM_EDIT_SORTLINES_INTEGER_DESCENDING,        false, false, false, nullptr },
 	{ VK_NULL,    IDM_EDIT_SORTLINES_DECIMALCOMMA_ASCENDING,    false, false, false, nullptr },
@@ -220,7 +223,13 @@ static const WinMenuKeyDefinition winKeyDefs[] =
 	{ VK_4,       IDM_SEARCH_GONEXTMARKER4,                     true,  false, false, TEXT("Next mark using 4th style") },
 	{ VK_5,       IDM_SEARCH_GONEXTMARKER5,                     true,  false, false, TEXT("Next mark using 5th style") },
 	{ VK_0,       IDM_SEARCH_GONEXTMARKER_DEF,                  true,  false, false, TEXT("Next mark created with Mark") },
-				 
+	{ VK_NULL,    IDM_SEARCH_STYLE1TOCLIP,                      false, false, false, TEXT("Copy Styled Text - 1st Style") },
+	{ VK_NULL,    IDM_SEARCH_STYLE2TOCLIP,                      false, false, false, TEXT("Copy Styled Text - 2nd Style") },
+	{ VK_NULL,    IDM_SEARCH_STYLE3TOCLIP,                      false, false, false, TEXT("Copy Styled Text - 3rd Style") },
+	{ VK_NULL,    IDM_SEARCH_STYLE4TOCLIP,                      false, false, false, TEXT("Copy Styled Text - 4th Style") },
+	{ VK_NULL,    IDM_SEARCH_STYLE5TOCLIP,                      false, false, false, TEXT("Copy Styled Text - 5th Style") },
+	{ VK_NULL,    IDM_SEARCH_ALLSTYLESTOCLIP,                   false, false, false, TEXT("Copy Styled Text - All Styles") },
+	{ VK_NULL,    IDM_SEARCH_MARKEDTOCLIP,                      false, false, false, TEXT("Copy Styled Text - Find Style (Marked)") },
 	{ VK_F2,      IDM_SEARCH_TOGGLE_BOOKMARK,                   true,  false, false, nullptr },
 	{ VK_F2,      IDM_SEARCH_NEXT_BOOKMARK,                     false, false, false, nullptr },
 	{ VK_F2,      IDM_SEARCH_PREV_BOOKMARK,                     false, false, true, nullptr  },
@@ -408,7 +417,6 @@ static const WinMenuKeyDefinition winKeyDefs[] =
 	{ VK_NULL,    IDM_CONFUPDATERPROXY,                         false, false, false, TEXT("Set Updater Proxy...") },
 	{ VK_NULL,    IDM_DEBUGINFO,                                false, false, false, nullptr },
 	{ VK_F1,      IDM_ABOUT,                                    false, false, false, nullptr }
-//  { VK_F1,      IDM_HELP,                                     false, false, true,  nullptr }
 };
 
 
@@ -485,9 +493,12 @@ static const ScintillaKeyDefinition scintKeyDefs[] =
 	{TEXT("SCI_HOMEWRAP"),                SCI_HOMEWRAP,                false, false, false, 0,           0},
 	{TEXT("SCI_HOMEWRAPEXTEND"),          SCI_HOMEWRAPEXTEND,          false, false, false, 0,           0},
 	{TEXT("SCI_VCHOME"),                  SCI_VCHOME,                  false, false, false, 0,           0},
-	{TEXT("SCI_VCHOMEWRAPEXTEND"),        SCI_VCHOMEWRAPEXTEND,        false, false, true,  VK_HOME,     0},
+	{TEXT("SCI_VCHOMEEXTEND"),            SCI_VCHOMEEXTEND,            false, false, false, 0,           0},
 	{TEXT("SCI_VCHOMERECTEXTEND"),        SCI_VCHOMERECTEXTEND,        false, true,  true,  VK_HOME,     0},
+	{TEXT("SCI_VCHOMEDISPLAY"),           SCI_VCHOMEDISPLAY,           false, false, false, 0,           0},
+	{TEXT("SCI_VCHOMEDISPLAYEXTEND"),     SCI_VCHOMEDISPLAYEXTEND,     false, false, false, 0,           0},
 	{TEXT("SCI_VCHOMEWRAP"),              SCI_VCHOMEWRAP,              false, false, false, VK_HOME,     0},
+	{TEXT("SCI_VCHOMEWRAPEXTEND"),        SCI_VCHOMEWRAPEXTEND,        false, false, true,  VK_HOME,     0},
 	{TEXT("SCI_LINEEND"),                 SCI_LINEEND,                 false, false, false, 0,           0},
 	{TEXT("SCI_LINEENDWRAPEXTEND"),       SCI_LINEENDWRAPEXTEND,       false, false, true,  VK_END,      0},
 	{TEXT("SCI_LINEENDRECTEXTEND"),       SCI_LINEENDRECTEXTEND,       false, true,  true,  VK_END,      0},
@@ -3977,6 +3988,8 @@ generic_string NppParameters::getLocPathFromStr(const generic_string & localizat
 		return TEXT("irish.xml");
 	if (localizationCode == TEXT("sgs"))
 		return TEXT("samogitian.xml");
+	if (localizationCode == TEXT("yue"))
+		return TEXT("hongKongCantonese.xml");
 
 	return generic_string();
 }
@@ -4215,10 +4228,20 @@ void NppParameters::feedGUIParameters(TiXmlNode *node)
 				else
 					isFailed = true;
 			}
+
+			val = element->Attribute(TEXT("iconSetNumber"));
+			if (val)
+			{
+				if (!lstrcmp(val, TEXT("1")))
+					_nppGUI._tabStatus |= TAB_ALTICONS;
+				else if (!lstrcmp(val, TEXT("0")))
+					_nppGUI._tabStatus |= 0;
+				else
+					isFailed = true;
+			}
+
 			if (isFailed)
 				_nppGUI._tabStatus = oldValue;
-
-
 		}
 		else if (!lstrcmp(nm, TEXT("Auto-detection")))
 		{
@@ -5204,6 +5227,10 @@ void NppParameters::feedGUIParameters(TiXmlNode *node)
 			const TCHAR * optDocPeekOnMap = element->Attribute(TEXT("docPeekOnMap"));
 			if (optDocPeekOnMap)
 				_nppGUI._isDocPeekOnMap = (lstrcmp(optDocPeekOnMap, TEXT("yes")) == 0);
+
+			const TCHAR* saveDlgExtFilterToAllTypesForNormText = element->Attribute(TEXT("saveDlgExtFilterToAllTypesForNormalText"));
+			if (saveDlgExtFilterToAllTypesForNormText)
+				_nppGUI._setSaveDlgExtFiltToAllTypesForNormText = (lstrcmp(saveDlgExtFilterToAllTypesForNormText, TEXT("yes")) == 0);
 		}
 		else if (!lstrcmp(nm, TEXT("commandLineInterpreter")))
 		{
@@ -5436,8 +5463,6 @@ void NppParameters::feedDockingManager(TiXmlNode *node)
 	if (element->Attribute(TEXT("bottomHeight"), &i))
 		_nppGUI._dockingData._bottomHight = i;
 
-
-
 	for (TiXmlNode *childNode = node->FirstChildElement(TEXT("FloatingWindow"));
 		childNode ;
 		childNode = childNode->NextSibling(TEXT("FloatingWindow")) )
@@ -5499,6 +5524,113 @@ void NppParameters::feedDockingManager(TiXmlNode *node)
 			int activeTab = 0;
 			dlgElement->Attribute(TEXT("activeTab"), &activeTab);
 			_nppGUI._dockingData._containerTabInfo.push_back(ContainerTabInfo(cont, activeTab));
+		}
+	}
+}
+
+void NppParameters::duplicateDockingManager(TiXmlNode* dockMngNode, TiXmlElement* dockMngElmt2Clone)
+{
+	if (!dockMngNode || !dockMngElmt2Clone) return;
+
+	TiXmlElement *dockMngElmt = dockMngNode->ToElement();
+	
+	int i;
+	if (dockMngElmt->Attribute(TEXT("leftWidth"), &i))
+		dockMngElmt2Clone->SetAttribute(TEXT("leftWidth"), i);
+
+	if (dockMngElmt->Attribute(TEXT("rightWidth"), &i))
+		dockMngElmt2Clone->SetAttribute(TEXT("rightWidth"), i);
+
+	if (dockMngElmt->Attribute(TEXT("topHeight"), &i))
+		dockMngElmt2Clone->SetAttribute(TEXT("topHeight"), i);
+
+	if (dockMngElmt->Attribute(TEXT("bottomHeight"), &i))
+		dockMngElmt2Clone->SetAttribute(TEXT("bottomHeight"), i);
+
+
+	for (TiXmlNode *childNode = dockMngNode->FirstChildElement(TEXT("FloatingWindow"));
+		childNode;
+		childNode = childNode->NextSibling(TEXT("FloatingWindow")))
+	{
+		TiXmlElement *floatElement = childNode->ToElement();
+		int cont;
+		if (floatElement->Attribute(TEXT("cont"), &cont))
+		{
+			TiXmlElement FWNode(TEXT("FloatingWindow"));
+			FWNode.SetAttribute(TEXT("cont"), cont);
+
+			int x = 0;
+			int y = 0;
+			int w = 100;
+			int h = 100;
+
+			floatElement->Attribute(TEXT("x"), &x);
+			FWNode.SetAttribute(TEXT("x"), x);
+
+			floatElement->Attribute(TEXT("y"), &y);
+			FWNode.SetAttribute(TEXT("y"), y);
+			
+			floatElement->Attribute(TEXT("width"), &w);
+			FWNode.SetAttribute(TEXT("width"), w);
+			
+			floatElement->Attribute(TEXT("height"), &h);
+			FWNode.SetAttribute(TEXT("height"), h);
+
+			dockMngElmt2Clone->InsertEndChild(FWNode);
+		}
+	}
+
+	for (TiXmlNode *childNode = dockMngNode->FirstChildElement(TEXT("PluginDlg"));
+		childNode;
+		childNode = childNode->NextSibling(TEXT("PluginDlg")))
+	{
+		TiXmlElement *dlgElement = childNode->ToElement();
+		const TCHAR *name = dlgElement->Attribute(TEXT("pluginName"));
+		TiXmlElement PDNode(TEXT("PluginDlg"));
+
+		int id;
+		const TCHAR *idStr = dlgElement->Attribute(TEXT("id"), &id);
+		if (name && idStr)
+		{
+			int curr = 0; // on left
+			int prev = 0; // on left
+
+			dlgElement->Attribute(TEXT("curr"), &curr);
+			dlgElement->Attribute(TEXT("prev"), &prev);
+
+			bool isVisible = false;
+			const TCHAR *val = dlgElement->Attribute(TEXT("isVisible"));
+			if (val)
+			{
+				isVisible = (lstrcmp(val, TEXT("yes")) == 0);
+			}
+
+			PDNode.SetAttribute(TEXT("pluginName"), name);
+			PDNode.SetAttribute(TEXT("id"), idStr);
+			PDNode.SetAttribute(TEXT("curr"), curr);
+			PDNode.SetAttribute(TEXT("prev"), prev);
+			PDNode.SetAttribute(TEXT("isVisible"), isVisible ? TEXT("yes") : TEXT("no"));
+
+			dockMngElmt2Clone->InsertEndChild(PDNode);
+		}
+	}
+
+	for (TiXmlNode *childNode = dockMngNode->FirstChildElement(TEXT("ActiveTabs"));
+		childNode;
+		childNode = childNode->NextSibling(TEXT("ActiveTabs")))
+	{
+		TiXmlElement *dlgElement = childNode->ToElement();
+		TiXmlElement CTNode(TEXT("ActiveTabs"));
+		int cont;
+		if (dlgElement->Attribute(TEXT("cont"), &cont))
+		{
+			int activeTab = 0;
+			dlgElement->Attribute(TEXT("activeTab"), &activeTab);
+
+			CTNode.SetAttribute(TEXT("cont"), cont);
+			CTNode.SetAttribute(TEXT("activeTab"), activeTab);
+
+			dockMngElmt2Clone->InsertEndChild(CTNode);
 		}
 	}
 }
@@ -5569,12 +5701,42 @@ bool NppParameters::writeScintillaParams()
 void NppParameters::createXmlTreeFromGUIParams()
 {
 	TiXmlNode *nppRoot = _pXmlUserDoc->FirstChild(TEXT("NotepadPlus"));
-	if (not nppRoot)
+	if (!nppRoot)
 	{
 		nppRoot = _pXmlUserDoc->InsertEndChild(TiXmlElement(TEXT("NotepadPlus")));
 	}
 
 	TiXmlNode *oldGUIRoot = nppRoot->FirstChildElement(TEXT("GUIConfigs"));
+	TiXmlElement* dockMngNodeDup = nullptr;
+	TiXmlNode* dockMngNodeOriginal = nullptr;
+	if (oldGUIRoot && _nppGUI._isCmdlineNosessionActivated)
+	{
+		for (TiXmlNode *childNode = oldGUIRoot->FirstChildElement(TEXT("GUIConfig"));
+			childNode;
+			childNode = childNode->NextSibling(TEXT("GUIConfig")))
+		{
+			TiXmlElement* element = childNode->ToElement();
+			const TCHAR* nm = element->Attribute(TEXT("name"));
+			if (nullptr == nm)
+				continue;
+
+			if (!lstrcmp(nm, TEXT("DockingManager")))
+			{
+				dockMngNodeOriginal = childNode;
+				break;
+			}
+		}
+
+		// Copy DockingParamNode
+		if (dockMngNodeOriginal)
+		{
+			dockMngNodeDup = new TiXmlElement(TEXT("GUIConfig"));
+			dockMngNodeDup->SetAttribute(TEXT("name"), TEXT("DockingManager"));
+
+			duplicateDockingManager(dockMngNodeOriginal, dockMngNodeDup);
+		}
+	}
+
 	// Remove the old root nod if it exist
 	if (oldGUIRoot)
 	{
@@ -5601,7 +5763,7 @@ void NppParameters::createXmlTreeFromGUIParams()
 		GUIConfigElement->InsertEndChild(TiXmlText(pStr));
 	}
 
-	// <GUIConfig name="TabBar" dragAndDrop="yes" drawTopBar="yes" drawInactiveTab="yes" reduce="yes" closeButton="yes" doubleClick2Close="no" vertical="no" multiLine="no" hide="no" quitOnEmpty="no" />
+	// <GUIConfig name="TabBar" dragAndDrop="yes" drawTopBar="yes" drawInactiveTab="yes" reduce="yes" closeButton="yes" doubleClick2Close="no" vertical="no" multiLine="no" hide="no" quitOnEmpty="no" iconSetNumber="0" />
 	{
 		TiXmlElement *GUIConfigElement = (newGUIRoot->InsertEndChild(TiXmlElement(TEXT("GUIConfig"))))->ToElement();
 		GUIConfigElement->SetAttribute(TEXT("name"), TEXT("TabBar"));
@@ -5635,6 +5797,9 @@ void NppParameters::createXmlTreeFromGUIParams()
 
 		pStr = (_nppGUI._tabStatus & TAB_QUITONEMPTY) ? TEXT("yes") : TEXT("no");
 		GUIConfigElement->SetAttribute(TEXT("quitOnEmpty"), pStr);
+
+		pStr = (_nppGUI._tabStatus & TAB_ALTICONS) ? TEXT("1") : TEXT("0");
+		GUIConfigElement->SetAttribute(TEXT("iconSetNumber"), pStr);
 	}
 
 	// <GUIConfig name="ScintillaViewsSplitter">vertical</GUIConfig>
@@ -5970,7 +6135,7 @@ void NppParameters::createXmlTreeFromGUIParams()
 		GUIConfigElement->SetAttribute(TEXT("setting"), _nppGUI._multiInstSetting);
 	}
 
-	// <GUIConfig name="MISC" fileSwitcherWithoutExtColumn="no" backSlashIsEscapeCharacterForSql="yes" newStyleSaveDlg="no" isFolderDroppedOpenFiles="no" />
+	// <GUIConfig name="MISC" fileSwitcherWithoutExtColumn="no" backSlashIsEscapeCharacterForSql="yes" newStyleSaveDlg="no" isFolderDroppedOpenFiles="no" saveDlgExtFilterToAllTypesForNormalText="no" />
 	{
 		TiXmlElement *GUIConfigElement = (newGUIRoot->InsertEndChild(TiXmlElement(TEXT("GUIConfig"))))->ToElement();
 		GUIConfigElement->SetAttribute(TEXT("name"), TEXT("MISC"));
@@ -5982,6 +6147,7 @@ void NppParameters::createXmlTreeFromGUIParams()
 		GUIConfigElement->SetAttribute(TEXT("isFolderDroppedOpenFiles"), _nppGUI._isFolderDroppedOpenFiles ? TEXT("yes") : TEXT("no"));
 		GUIConfigElement->SetAttribute(TEXT("docPeekOnTab"), _nppGUI._isDocPeekOnTab ? TEXT("yes") : TEXT("no"));
 		GUIConfigElement->SetAttribute(TEXT("docPeekOnMap"), _nppGUI._isDocPeekOnMap ? TEXT("yes") : TEXT("no"));
+		GUIConfigElement->SetAttribute(TEXT("saveDlgExtFilterToAllTypesForNormalText"), _nppGUI._setSaveDlgExtFiltToAllTypesForNormText ? TEXT("yes") : TEXT("no"));
 	}
 
 	// <GUIConfig name="Searching" "monospacedFontFindDlg"="no" stopFillingFindField="no" findDlgAlwaysVisible="no" confirmReplaceOpenDocs="yes" confirmMacroReplaceOpenDocs="yes" confirmReplaceInFiles="yes" confirmMacroReplaceInFiles="yes" />
@@ -6025,7 +6191,15 @@ void NppParameters::createXmlTreeFromGUIParams()
 
 	// <GUIConfig name="DockingManager" leftWidth="328" rightWidth="359" topHeight="200" bottomHeight="436">
 	// ...
-	insertDockingParamNode(newGUIRoot);
+	if (_nppGUI._isCmdlineNosessionActivated && dockMngNodeDup)
+	{
+		newGUIRoot->InsertEndChild(*dockMngNodeDup);
+		delete dockMngNodeDup;
+	}
+	else
+	{
+		insertDockingParamNode(newGUIRoot);
+	}
 }
 
 bool NppParameters::writeFindHistory()
