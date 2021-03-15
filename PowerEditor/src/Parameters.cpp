@@ -1,35 +1,23 @@
 // This file is part of Notepad++ project
-// Copyright (C)2020 Don HO <don.h@free.fr>
-//
-// This program is free software; you can redistribute it and/or
-// modify it under the terms of the GNU General Public License
-// as published by the Free Software Foundation; either
-// version 2 of the License, or (at your option) any later version.
-//
-// Note that the GPL places important restrictions on "derived works", yet
-// it does not provide a detailed definition of that term.  To avoid
-// misunderstandings, we consider an application to constitute a
-// "derivative work" for the purpose of this license if it does any of the
-// following:
-// 1. Integrates source code from Notepad++.
-// 2. Integrates/includes/aggregates Notepad++ into a proprietary executable
-//	installer, such as those produced by InstallShield.
-// 3. Links to a library or executes a program that does any of the above.
+// Copyright (C)2021 Don HO <don.h@free.fr>
+
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// at your option any later version.
 //
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with this program; if not, write to the Free Software
-// Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <time.h>
 #include <shlwapi.h>
 #include <shlobj.h>
 #include "Parameters.h"
-#include "FileDialog.h"
 #include "ScintillaEditView.h"
 #include "keys.h"
 #include "localization.h"
@@ -179,8 +167,8 @@ static const WinMenuKeyDefinition winKeyDefs[] =
 	{ VK_NULL,    IDM_EDIT_CHANGESEARCHENGINE,                  false, false, false, nullptr },
 //  { VK_NULL,    IDM_EDIT_COLUMNMODETIP,                       false, false, false, nullptr },
 	{ VK_C,       IDM_EDIT_COLUMNMODE,                          false, true,  false, nullptr },
-	{ VK_NULL,    IDM_EDIT_CHAR_PANEL,                          false, false, false, nullptr },
-	{ VK_NULL,    IDM_EDIT_CLIPBOARDHISTORY_PANEL,              false, false, false, nullptr },
+	{ VK_NULL,    IDM_EDIT_CHAR_PANEL,                          false, false, false, TEXT("Toggle Character Panel") },
+	{ VK_NULL,    IDM_EDIT_CLIPBOARDHISTORY_PANEL,              false, false, false, TEXT("Toggle Clipboard History") },
 	{ VK_NULL,    IDM_EDIT_SETREADONLY,                         false, false, false, nullptr },
 	{ VK_NULL,    IDM_EDIT_CLEARREADONLY,                       false, false, false, nullptr },
 	{ VK_F,       IDM_SEARCH_FIND,                              true,  false, false, nullptr },
@@ -721,7 +709,7 @@ bool LocalizationSwitcher::addLanguageFromXml(const std::wstring& xmlFullPath)
 {
 	wchar_t * fn = ::PathFindFileNameW(xmlFullPath.c_str());
 	wstring foundLang = getLangFromXmlFileName(fn);
-	if (not foundLang.empty())
+	if (!foundLang.empty())
 	{
 		_localizationList.push_back(pair<wstring, wstring>(foundLang, xmlFullPath));
 		return true;
@@ -852,8 +840,6 @@ winVer NppParameters::getWindowsVersion()
 
    return WV_UNKNOWN;
 }
-
-int FileDialog::_dialogFileBoxId = (NppParameters::getInstance()).getWinVersion() < WV_W2K?edt1:cmb13;
 
 
 NppParameters::NppParameters()
@@ -1005,8 +991,6 @@ bool NppParameters::load()
 {
 	L_END = L_EXTERNAL;
 	bool isAllLaoded = true;
-	for (int i = 0 ; i < NB_LANG ; _langList[i] = NULL, ++i)
-	{}
 
 	_isx64 = sizeof(void *) == 8;
 
@@ -1037,6 +1021,9 @@ bool NppParameters::load()
 	_pluginRootDir = _nppPath;
 	PathAppend(_pluginRootDir, TEXT("plugins"));
 
+	//
+	// the 3rd priority: general default configuration
+	//
 	generic_string nppPluginRootParent;
 	if (_isLocal)
 	{
@@ -1078,7 +1065,9 @@ bool NppParameters::load()
 	generic_string cloudChoicePath{_userPath};
 	cloudChoicePath += TEXT("\\cloud\\choice");
 
-	// cloudChoicePath doesn't exist, just quit
+	//
+	// the 2nd priority: cloud Choice Path
+	//
 	if (::PathFileExists(cloudChoicePath.c_str()))
 	{
 		// Read cloud choice
@@ -1086,7 +1075,7 @@ bool NppParameters::load()
 		WcharMbcsConvertor& wmc = WcharMbcsConvertor::getInstance();
 		std::wstring cloudChoiceStrW = wmc.char2wchar(cloudChoiceStr.c_str(), SC_CP_UTF8);
 
-		if (not cloudChoiceStrW.empty() and ::PathFileExists(cloudChoiceStrW.c_str()))
+		if (!cloudChoiceStrW.empty() && ::PathFileExists(cloudChoiceStrW.c_str()))
 		{
 			_userPath = cloudChoiceStrW;
 			_nppGUI._cloudPath = cloudChoiceStrW;
@@ -1094,6 +1083,26 @@ bool NppParameters::load()
 		}
 	}
 
+	//
+	// the 1st priority: custom settings dir via command line argument
+	//
+	if (!_cmdSettingsDir.empty())
+	{
+		if (!::PathIsDirectory(_cmdSettingsDir.c_str()))
+		{
+			// The following text is not translatable.
+			// _pNativeLangSpeaker is initialized AFTER _userPath being dterminated because nativeLang.xml is from from _userPath.
+			generic_string errMsg = TEXT("The given path\r");
+			errMsg += _cmdSettingsDir;
+			errMsg += TEXT("\nvia command line \"-settingsDir=\" is not a valid directory.\rThis argument will be ignored.");
+			::MessageBox(NULL, errMsg.c_str(), TEXT("Invalid directory"), MB_OK);
+		}
+		else
+		{
+			_userPath = _cmdSettingsDir;
+			_sessionPath = _userPath; // reset session path
+		}
+	}
 
 	//-------------------------------------//
 	// Transparent function for w2k and xp //
@@ -1192,7 +1201,7 @@ bool NppParameters::load()
 	
 	if (!loadOkay)
 	{
-		TiXmlDeclaration* decl = new TiXmlDeclaration(TEXT("1.0"), TEXT("Windows-1252"), TEXT(""));
+		TiXmlDeclaration* decl = new TiXmlDeclaration(TEXT("1.0"), TEXT("UTF-8"), TEXT(""));
 		_pXmlUserDoc->LinkEndChild(decl);
 	}
 	else
@@ -1302,7 +1311,7 @@ bool NppParameters::load()
 	// LocalizationSwitcher should use always user path
 	_localizationSwitcher._nativeLangPath = nativeLangPath;
 
-	if (not _startWithLocFileName.empty()) // localization argument detected, use user wished localization
+	if (!_startWithLocFileName.empty()) // localization argument detected, use user wished localization
 	{
 		// overwrite nativeLangPath variable
 		nativeLangPath = _nppPath;
@@ -1410,20 +1419,19 @@ bool NppParameters::load()
 	const NppGUI & nppGUI = (NppParameters::getInstance()).getNppGUI();
 	if (nppGUI._rememberLastSession)
 	{
-		_pXmlSessionDoc = new TiXmlDocument(_sessionPath);
+		TiXmlDocument* pXmlSessionDoc = new TiXmlDocument(_sessionPath);
 
-		loadOkay = _pXmlSessionDoc->LoadFile();
+		loadOkay = pXmlSessionDoc->LoadFile();
 		if (!loadOkay)
 			isAllLaoded = false;
 		else
-			getSessionFromXmlTree();
+			getSessionFromXmlTree(pXmlSessionDoc, _session);
 
-		delete _pXmlSessionDoc;
+		delete pXmlSessionDoc;
+
 		for (size_t i = 0, len = _pXmlExternalLexerDoc.size() ; i < len ; ++i)
 			if (_pXmlExternalLexerDoc[i])
 				delete _pXmlExternalLexerDoc[i];
-
-		_pXmlSessionDoc = nullptr;
 	}
 
 	//------------------------------//
@@ -1459,7 +1467,6 @@ void NppParameters::destroyInstance()
 	delete _pXmlToolIconsDoc;
 	delete _pXmlShortcutDoc;
 	delete _pXmlContextMenuDocA;
-	delete _pXmlSessionDoc;
 	delete _pXmlBlacklistDoc;
 	delete 	getInstancePointer();
 }
@@ -1674,7 +1681,7 @@ bool NppParameters::getUserParametersFromXmlTree()
 		return false;
 
 	TiXmlNode *root = _pXmlUserDoc->FirstChild(TEXT("NotepadPlus"));
-	if (not root)
+	if (!root)
 		return false;
 
 	// Get GUI parameters
@@ -1973,7 +1980,7 @@ bool NppParameters::getContextMenuFromXmlTree(HMENU mainMenuHadle, HMENU plugins
 				menuEntryName = menuEntryNameA?wmc.char2wchar(menuEntryNameA, SC_CP_UTF8):TEXT("");
 				menuItemName = menuItemNameA?wmc.char2wchar(menuItemNameA, SC_CP_UTF8):TEXT("");
 
-				if (not menuEntryName.empty() and not menuItemName.empty())
+				if (!menuEntryName.empty() && !menuItemName.empty())
 				{
 					int cmd = getCmdIdFromMenuEntryItemName(mainMenuHadle, menuEntryName, menuItemName);
 					if (cmd != -1)
@@ -1990,7 +1997,7 @@ bool NppParameters::getContextMenuFromXmlTree(HMENU mainMenuHadle, HMENU plugins
 					pluginCmdName = pluginCmdNameA?wmc.char2wchar(pluginCmdNameA, SC_CP_UTF8):TEXT("");
 
 					// if plugin menu existing plls the value of PluginEntryName and PluginCommandItemName are valid
-					if (pluginsMenu && not pluginName.empty() && not pluginCmdName.empty())
+					if (pluginsMenu && !pluginName.empty() && !pluginCmdName.empty())
 					{
 						int pluginCmdId = getPluginCmdIdFromMenuEntryItemName(pluginsMenu, pluginName, pluginCmdName);
 						if (pluginCmdId != -1)
@@ -2025,31 +2032,19 @@ bool NppParameters::loadSession(Session & session, const TCHAR *sessionFileName)
 	TiXmlDocument *pXmlSessionDocument = new TiXmlDocument(sessionFileName);
 	bool loadOkay = pXmlSessionDocument->LoadFile();
 	if (loadOkay)
-		loadOkay = getSessionFromXmlTree(pXmlSessionDocument, &session);
+		loadOkay = getSessionFromXmlTree(pXmlSessionDocument, session);
 
 	delete pXmlSessionDocument;
 	return loadOkay;
 }
 
 
-bool NppParameters::getSessionFromXmlTree(TiXmlDocument *pSessionDoc, Session *pSession)
+bool NppParameters::getSessionFromXmlTree(TiXmlDocument *pSessionDoc, Session& session)
 {
-	if ((pSessionDoc) && (!pSession))
+	if (!pSessionDoc)
 		return false;
-
-	TiXmlDocument **ppSessionDoc = &_pXmlSessionDoc;
-	Session *ptrSession = &_session;
-
-	if (pSessionDoc)
-	{
-		ppSessionDoc = &pSessionDoc;
-		ptrSession = pSession;
-	}
-
-	if (!*ppSessionDoc)
-		return false;
-
-	TiXmlNode *root = (*ppSessionDoc)->FirstChild(TEXT("NotepadPlus"));
+	
+	TiXmlNode *root = pSessionDoc->FirstChild(TEXT("NotepadPlus"));
 	if (!root)
 		return false;
 
@@ -2062,7 +2057,7 @@ bool NppParameters::getSessionFromXmlTree(TiXmlDocument *pSessionDoc, Session *p
 	const TCHAR *str = actView->Attribute(TEXT("activeView"), &index);
 	if (str)
 	{
-		(*ptrSession)._activeView = index;
+		session._activeView = index;
 	}
 
 	const size_t nbView = 2;
@@ -2079,9 +2074,9 @@ bool NppParameters::getSessionFromXmlTree(TiXmlDocument *pSessionDoc, Session *p
 			if (str)
 			{
 				if (k == 0)
-					(*ptrSession)._activeMainIndex = index2;
+					session._activeMainIndex = index2;
 				else // k == 1
-					(*ptrSession)._activeSubIndex = index2;
+					session._activeSubIndex = index2;
 			}
 			for (TiXmlNode *childNode = viewRoots[k]->FirstChildElement(TEXT("File"));
 				childNode ;
@@ -2173,10 +2168,32 @@ bool NppParameters::getSessionFromXmlTree(TiXmlDocument *pSessionDoc, Session *p
 						}
 					}
 					if (k == 0)
-						(*ptrSession)._mainViewFiles.push_back(sfi);
+						session._mainViewFiles.push_back(sfi);
 					else // k == 1
-						(*ptrSession)._subViewFiles.push_back(sfi);
+						session._subViewFiles.push_back(sfi);
 				}
+			}
+		}
+	}
+
+	// Node structure and naming corresponds to config.xml
+	TiXmlNode *fileBrowserRoot = sessionRoot->FirstChildElement(TEXT("FileBrowser"));
+	if (fileBrowserRoot)
+	{
+		const TCHAR *selectedItemPath = (fileBrowserRoot->ToElement())->Attribute(TEXT("latestSelectedItem"));
+		if (selectedItemPath)
+		{
+			session._fileBrowserSelectedItem = selectedItemPath;
+		}
+
+		for (TiXmlNode *childNode = fileBrowserRoot->FirstChildElement(TEXT("root"));
+			childNode;
+			childNode = childNode->NextSibling(TEXT("root")))
+		{
+			const TCHAR *fileName = (childNode->ToElement())->Attribute(TEXT("foldername"));
+			if (fileName)
+			{
+				session._fileBrowserRoots.push_back({ fileName });
 			}
 		}
 	}
@@ -2368,6 +2385,18 @@ void NppParameters::feedFindHistoryParameters(TiXmlNode *node)
 	boolStr = (findHistoryRoot->ToElement())->Attribute(TEXT("fifInHiddenFolder"));
 	if (boolStr)
 		_findHistory._isFifInHiddenFolder = (lstrcmp(TEXT("yes"), boolStr) == 0);
+
+	boolStr = (findHistoryRoot->ToElement())->Attribute(TEXT("fifProjectPanel1"));
+	if (boolStr)
+		_findHistory._isFifProjectPanel_1 = (lstrcmp(TEXT("yes"), boolStr) == 0);
+
+	boolStr = (findHistoryRoot->ToElement())->Attribute(TEXT("fifProjectPanel2"));
+	if (boolStr)
+		_findHistory._isFifProjectPanel_2 = (lstrcmp(TEXT("yes"), boolStr) == 0);
+
+	boolStr = (findHistoryRoot->ToElement())->Attribute(TEXT("fifProjectPanel3"));
+	if (boolStr)
+		_findHistory._isFifProjectPanel_3 = (lstrcmp(TEXT("yes"), boolStr) == 0);
 
 	boolStr = (findHistoryRoot->ToElement())->Attribute(TEXT("fifFilterFollowsDoc"));
 	if (boolStr)
@@ -2723,6 +2752,7 @@ std::pair<unsigned char, unsigned char> NppParameters::feedUserLang(TiXmlNode *n
 bool NppParameters::importUDLFromFile(const generic_string& sourceFile)
 {
 	TiXmlDocument *pXmlUserLangDoc = new TiXmlDocument(sourceFile);
+
 	bool loadOkay = pXmlUserLangDoc->LoadFile();
 	if (loadOkay)
 	{
@@ -2937,6 +2967,8 @@ void NppParameters::writeDefaultUDL()
 		if (!_pXmlUserLangDoc)
 		{
 			_pXmlUserLangDoc = new TiXmlDocument(_userDefineLangPath);
+			TiXmlDeclaration* decl = new TiXmlDeclaration(TEXT("1.0"), TEXT("UTF-8"), TEXT(""));
+			_pXmlUserLangDoc->LinkEndChild(decl);
 			_pXmlUserLangDoc->InsertEndChild(TiXmlElement(TEXT("NotepadPlus")));
 		}
 
@@ -3128,8 +3160,12 @@ void NppParameters::writeSession(const Session & session, const TCHAR *fileName)
 {
 	const TCHAR *pathName = fileName?fileName:_sessionPath.c_str();
 
-	_pXmlSessionDoc = new TiXmlDocument(pathName);
-	TiXmlNode *root = _pXmlSessionDoc->InsertEndChild(TiXmlElement(TEXT("NotepadPlus")));
+	TiXmlDocument* pXmlSessionDoc = new TiXmlDocument(pathName);
+
+	TiXmlDeclaration* decl = new TiXmlDeclaration(TEXT("1.0"), TEXT("UTF-8"), TEXT(""));
+	pXmlSessionDoc->LinkEndChild(decl);
+
+	TiXmlNode *root = pXmlSessionDoc->InsertEndChild(TiXmlElement(TEXT("NotepadPlus")));
 
 	if (root)
 	{
@@ -3202,19 +3238,35 @@ void NppParameters::writeSession(const Session & session, const TCHAR *fileName)
 				}
 			}
 		}
+
+		if (session._includeFileBrowser)
+		{
+			// Node structure and naming corresponds to config.xml
+			TiXmlNode* fileBrowserRootNode = sessionNode->InsertEndChild(TiXmlElement(TEXT("FileBrowser")));
+			fileBrowserRootNode->ToElement()->SetAttribute(TEXT("latestSelectedItem"), session._fileBrowserSelectedItem.c_str());
+			for (const auto& root : session._fileBrowserRoots)
+			{
+				TiXmlNode *fileNameNode = fileBrowserRootNode->InsertEndChild(TiXmlElement(TEXT("root")));
+				(fileNameNode->ToElement())->SetAttribute(TEXT("foldername"), root.c_str());
+			}
+		}
 	}
-	_pXmlSessionDoc->SaveFile();
+	pXmlSessionDoc->SaveFile();
+
+	delete pXmlSessionDoc;
 }
 
 
 void NppParameters::writeShortcuts()
 {
-	if (not _isAnyShortcutModified) return;
+	if (!_isAnyShortcutModified) return;
 
-	if (not _pXmlShortcutDoc)
+	if (!_pXmlShortcutDoc)
 	{
 		//do the treatment
 		_pXmlShortcutDoc = new TiXmlDocument(_shortcutsPath);
+		TiXmlDeclaration* decl = new TiXmlDeclaration(TEXT("1.0"), TEXT("UTF-8"), TEXT(""));
+		_pXmlShortcutDoc->LinkEndChild(decl);
 	}
 
 	TiXmlNode *root = _pXmlShortcutDoc->FirstChild(TEXT("NotepadPlus"));
@@ -3649,16 +3701,16 @@ void StyleArray::addStyler(int styleID, TiXmlNode *styleNode)
 
 bool NppParameters::writeRecentFileHistorySettings(int nbMaxFile) const
 {
-	if (not _pXmlUserDoc) return false;
+	if (!_pXmlUserDoc) return false;
 
 	TiXmlNode *nppRoot = _pXmlUserDoc->FirstChild(TEXT("NotepadPlus"));
-	if (not nppRoot)
+	if (!nppRoot)
 	{
 		nppRoot = _pXmlUserDoc->InsertEndChild(TiXmlElement(TEXT("NotepadPlus")));
 	}
 
 	TiXmlNode *historyNode = nppRoot->FirstChildElement(TEXT("History"));
-	if (not historyNode)
+	if (!historyNode)
 	{
 		historyNode = nppRoot->InsertEndChild(TiXmlElement(TEXT("History")));
 	}
@@ -3674,7 +3726,7 @@ bool NppParameters::writeProjectPanelsSettings() const
 	if (!_pXmlUserDoc) return false;
 
 	TiXmlNode *nppRoot = _pXmlUserDoc->FirstChild(TEXT("NotepadPlus"));
-	if (not nppRoot)
+	if (!nppRoot)
 	{
 		nppRoot = _pXmlUserDoc->InsertEndChild(TiXmlElement(TEXT("NotepadPlus")));
 	}
@@ -3709,7 +3761,7 @@ bool NppParameters::writeFileBrowserSettings(const vector<generic_string> & root
 	if (!_pXmlUserDoc) return false;
 
 	TiXmlNode *nppRoot = _pXmlUserDoc->FirstChild(TEXT("NotepadPlus"));
-	if (not nppRoot)
+	if (!nppRoot)
 	{
 		nppRoot = _pXmlUserDoc->InsertEndChild(TiXmlElement(TEXT("NotepadPlus")));
 	}
@@ -3747,13 +3799,13 @@ bool NppParameters::writeFileBrowserSettings(const vector<generic_string> & root
 bool NppParameters::writeHistory(const TCHAR *fullpath)
 {
 	TiXmlNode *nppRoot = _pXmlUserDoc->FirstChild(TEXT("NotepadPlus"));
-	if (not nppRoot)
+	if (!nppRoot)
 	{
 		nppRoot = _pXmlUserDoc->InsertEndChild(TiXmlElement(TEXT("NotepadPlus")));
 	}
 
 	TiXmlNode *historyNode = nppRoot->FirstChildElement(TEXT("History"));
-	if (not historyNode)
+	if (!historyNode)
 	{
 		historyNode = nppRoot->InsertEndChild(TiXmlElement(TEXT("History")));
 	}
@@ -3990,6 +4042,8 @@ generic_string NppParameters::getLocPathFromStr(const generic_string & localizat
 		return TEXT("samogitian.xml");
 	if (localizationCode == TEXT("yue"))
 		return TEXT("hongKongCantonese.xml");
+	if (localizationCode == TEXT("ab") || localizationCode == TEXT("abk"))
+		return TEXT("abkhazian.xml");
 
 	return generic_string();
 }
@@ -4439,6 +4493,17 @@ void NppParameters::feedGUIParameters(TiXmlNode *node)
 					if ((i >= urlMin) && (i <= urlMax))
 						_nppGUI._styleURL = urlMode(i);
 				}
+			}
+		}
+
+		else if (!lstrcmp(nm, TEXT("uriCustomizedSchemes")))
+		{
+			TiXmlNode *n = childNode->FirstChild();
+			if (n)
+			{
+				const TCHAR* val = n->Value();
+				if (val)
+				_nppGUI._uriSchemes = val;
 			}
 		}
 
@@ -5212,10 +5277,6 @@ void NppParameters::feedGUIParameters(TiXmlNode *node)
 			if (optNameWriteTechnologyEngine)
 				_nppGUI._writeTechnologyEngine = (lstrcmp(optNameWriteTechnologyEngine, TEXT("1")) == 0) ? directWriteTechnology : defaultTechnology;
 
-			const TCHAR * optNameNewStyleSaveDlg = element->Attribute(TEXT("newStyleSaveDlg"));
-			if (optNameNewStyleSaveDlg)
-				_nppGUI._useNewStyleSaveDlg = (lstrcmp(optNameNewStyleSaveDlg, TEXT("yes")) == 0);
-
 			const TCHAR * optNameFolderDroppedOpenFiles = element->Attribute(TEXT("isFolderDroppedOpenFiles"));
 			if (optNameFolderDroppedOpenFiles)
 				_nppGUI._isFolderDroppedOpenFiles = (lstrcmp(optNameFolderDroppedOpenFiles, TEXT("yes")) == 0);
@@ -5228,9 +5289,13 @@ void NppParameters::feedGUIParameters(TiXmlNode *node)
 			if (optDocPeekOnMap)
 				_nppGUI._isDocPeekOnMap = (lstrcmp(optDocPeekOnMap, TEXT("yes")) == 0);
 
-			const TCHAR* saveDlgExtFilterToAllTypesForNormText = element->Attribute(TEXT("saveDlgExtFilterToAllTypesForNormalText"));
-			if (saveDlgExtFilterToAllTypesForNormText)
-				_nppGUI._setSaveDlgExtFiltToAllTypesForNormText = (lstrcmp(saveDlgExtFilterToAllTypesForNormText, TEXT("yes")) == 0);
+			const TCHAR* saveDlgExtFilterToAllTypes = element->Attribute(TEXT("saveDlgExtFilterToAllTypes"));
+			if (saveDlgExtFilterToAllTypes)
+				_nppGUI._setSaveDlgExtFiltToAllTypes = (lstrcmp(saveDlgExtFilterToAllTypes, TEXT("yes")) == 0);
+
+			const TCHAR * optMuteSounds = element->Attribute(TEXT("muteSounds"));
+			if (optMuteSounds)
+				_nppGUI._muteSounds = lstrcmp(optMuteSounds, TEXT("yes")) == 0;
 		}
 		else if (!lstrcmp(nm, TEXT("commandLineInterpreter")))
 		{
@@ -5257,6 +5322,16 @@ void NppParameters::feedScintillaParam(TiXmlNode *node)
 			_svp._lineNumberMarginShow = true;
 		else if (!lstrcmp(nm, TEXT("hide")))
 			_svp._lineNumberMarginShow = false;
+	}
+
+	// Line Number Margin dynamic width
+	nm = element->Attribute(TEXT("lineNumberDynamicWidth"));
+	if (nm)
+	{
+		if (!lstrcmp(nm, TEXT("yes")))
+			_svp._lineNumberMarginDynamicWidth = true;
+		else if (!lstrcmp(nm, TEXT("no")))
+			_svp._lineNumberMarginDynamicWidth = false;
 	}
 
 	// Bookmark Margin
@@ -5641,25 +5716,26 @@ bool NppParameters::writeScintillaParams()
 
 	const TCHAR *pViewName = TEXT("ScintillaPrimaryView");
 	TiXmlNode *nppRoot = _pXmlUserDoc->FirstChild(TEXT("NotepadPlus"));
-	if (not nppRoot)
+	if (!nppRoot)
 	{
 		nppRoot = _pXmlUserDoc->InsertEndChild(TiXmlElement(TEXT("NotepadPlus")));
 	}
 
 	TiXmlNode *configsRoot = nppRoot->FirstChildElement(TEXT("GUIConfigs"));
-	if (not configsRoot)
+	if (!configsRoot)
 	{
 		configsRoot = nppRoot->InsertEndChild(TiXmlElement(TEXT("GUIConfigs")));
 	}
 
 	TiXmlNode *scintNode = getChildElementByAttribut(configsRoot, TEXT("GUIConfig"), TEXT("name"), pViewName);
-	if (not scintNode)
+	if (!scintNode)
 	{
 		scintNode = configsRoot->InsertEndChild(TiXmlElement(TEXT("GUIConfig")));
 		(scintNode->ToElement())->SetAttribute(TEXT("name"), pViewName);
 	}
 
 	(scintNode->ToElement())->SetAttribute(TEXT("lineNumberMargin"), _svp._lineNumberMarginShow?TEXT("show"):TEXT("hide"));
+	(scintNode->ToElement())->SetAttribute(TEXT("lineNumberDynamicWidth"), _svp._lineNumberMarginDynamicWidth ?TEXT("yes"):TEXT("no"));
 	(scintNode->ToElement())->SetAttribute(TEXT("bookMarkMargin"), _svp._bookMarkMarginShow?TEXT("show"):TEXT("hide"));
 	(scintNode->ToElement())->SetAttribute(TEXT("indentGuideLine"), _svp._indentGuideLineShow?TEXT("show"):TEXT("hide"));
 	const TCHAR *pFolderStyleStr = (_svp._folderStyle == FOLDER_STYLE_SIMPLE)?TEXT("simple"):
@@ -5998,6 +6074,12 @@ void NppParameters::createXmlTreeFromGUIParams()
 		GUIConfigElement->InsertEndChild(TiXmlText(szStr));
 	}
 
+	// <GUIConfig name="uriCustomizedSchemes">svn://</GUIConfig>
+	{
+		TiXmlElement *GUIConfigElement = (newGUIRoot->InsertEndChild(TiXmlElement(TEXT("GUIConfig"))))->ToElement();
+		GUIConfigElement->SetAttribute(TEXT("name"), TEXT("uriCustomizedSchemes"));
+		GUIConfigElement->InsertEndChild(TiXmlText(_nppGUI._uriSchemes.c_str()));
+	}
 	// <GUIConfig name = "globalOverride" fg = "no" bg = "no" font = "no" fontSize = "no" bold = "no" italic = "no" underline = "no" / >
 	{
 		TiXmlElement *GUIConfigElement = (newGUIRoot->InsertEndChild(TiXmlElement(TEXT("GUIConfig"))))->ToElement();
@@ -6135,7 +6217,7 @@ void NppParameters::createXmlTreeFromGUIParams()
 		GUIConfigElement->SetAttribute(TEXT("setting"), _nppGUI._multiInstSetting);
 	}
 
-	// <GUIConfig name="MISC" fileSwitcherWithoutExtColumn="no" backSlashIsEscapeCharacterForSql="yes" newStyleSaveDlg="no" isFolderDroppedOpenFiles="no" saveDlgExtFilterToAllTypesForNormalText="no" />
+	// <GUIConfig name="MISC" fileSwitcherWithoutExtColumn="no" backSlashIsEscapeCharacterForSql="yes" isFolderDroppedOpenFiles="no" saveDlgExtFilterToAllTypes="no" />
 	{
 		TiXmlElement *GUIConfigElement = (newGUIRoot->InsertEndChild(TiXmlElement(TEXT("GUIConfig"))))->ToElement();
 		GUIConfigElement->SetAttribute(TEXT("name"), TEXT("MISC"));
@@ -6143,11 +6225,11 @@ void NppParameters::createXmlTreeFromGUIParams()
 		GUIConfigElement->SetAttribute(TEXT("fileSwitcherWithoutExtColumn"), _nppGUI._fileSwitcherWithoutExtColumn ? TEXT("yes") : TEXT("no"));
 		GUIConfigElement->SetAttribute(TEXT("backSlashIsEscapeCharacterForSql"), _nppGUI._backSlashIsEscapeCharacterForSql ? TEXT("yes") : TEXT("no"));
 		GUIConfigElement->SetAttribute(TEXT("writeTechnologyEngine"), _nppGUI._writeTechnologyEngine);
-		GUIConfigElement->SetAttribute(TEXT("newStyleSaveDlg"), _nppGUI._useNewStyleSaveDlg ? TEXT("yes") : TEXT("no"));
 		GUIConfigElement->SetAttribute(TEXT("isFolderDroppedOpenFiles"), _nppGUI._isFolderDroppedOpenFiles ? TEXT("yes") : TEXT("no"));
 		GUIConfigElement->SetAttribute(TEXT("docPeekOnTab"), _nppGUI._isDocPeekOnTab ? TEXT("yes") : TEXT("no"));
 		GUIConfigElement->SetAttribute(TEXT("docPeekOnMap"), _nppGUI._isDocPeekOnMap ? TEXT("yes") : TEXT("no"));
-		GUIConfigElement->SetAttribute(TEXT("saveDlgExtFilterToAllTypesForNormalText"), _nppGUI._setSaveDlgExtFiltToAllTypesForNormText ? TEXT("yes") : TEXT("no"));
+		GUIConfigElement->SetAttribute(TEXT("saveDlgExtFilterToAllTypes"), _nppGUI._setSaveDlgExtFiltToAllTypes ? TEXT("yes") : TEXT("no"));
+		GUIConfigElement->SetAttribute(TEXT("muteSounds"), _nppGUI._muteSounds ? TEXT("yes") : TEXT("no"));
 	}
 
 	// <GUIConfig name="Searching" "monospacedFontFindDlg"="no" stopFillingFindField="no" findDlgAlwaysVisible="no" confirmReplaceOpenDocs="yes" confirmMacroReplaceOpenDocs="yes" confirmReplaceInFiles="yes" confirmMacroReplaceInFiles="yes" />
@@ -6204,10 +6286,10 @@ void NppParameters::createXmlTreeFromGUIParams()
 
 bool NppParameters::writeFindHistory()
 {
-	if (not _pXmlUserDoc) return false;
+	if (!_pXmlUserDoc) return false;
 
 	TiXmlNode *nppRoot = _pXmlUserDoc->FirstChild(TEXT("NotepadPlus"));
-	if (not nppRoot)
+	if (!nppRoot)
 	{
 		nppRoot = _pXmlUserDoc->InsertEndChild(TiXmlElement(TEXT("NotepadPlus")));
 	}
@@ -6232,6 +6314,9 @@ bool NppParameters::writeFindHistory()
 
 	(findHistoryRoot->ToElement())->SetAttribute(TEXT("fifRecuisive"),			_findHistory._isFifRecuisive?TEXT("yes"):TEXT("no"));
 	(findHistoryRoot->ToElement())->SetAttribute(TEXT("fifInHiddenFolder"),		_findHistory._isFifInHiddenFolder?TEXT("yes"):TEXT("no"));
+	(findHistoryRoot->ToElement())->SetAttribute(TEXT("fifProjectPanel1"),	    	_findHistory._isFifProjectPanel_1?TEXT("yes"):TEXT("no"));
+	(findHistoryRoot->ToElement())->SetAttribute(TEXT("fifProjectPanel2"),	      	_findHistory._isFifProjectPanel_2?TEXT("yes"):TEXT("no"));
+	(findHistoryRoot->ToElement())->SetAttribute(TEXT("fifProjectPanel3"),	       	_findHistory._isFifProjectPanel_3?TEXT("yes"):TEXT("no"));
 	(findHistoryRoot->ToElement())->SetAttribute(TEXT("fifFilterFollowsDoc"),	_findHistory._isFilterFollowDoc?TEXT("yes"):TEXT("no"));
 	(findHistoryRoot->ToElement())->SetAttribute(TEXT("fifFolderFollowsDoc"),	_findHistory._isFolderFollowDoc?TEXT("yes"):TEXT("no"));
 

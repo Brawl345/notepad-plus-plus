@@ -1,29 +1,18 @@
 // This file is part of Notepad++ project
-// Copyright (C)2020 Don HO <don.h@free.fr>
-//
-// This program is free software; you can redistribute it and/or
-// modify it under the terms of the GNU General Public License
-// as published by the Free Software Foundation; either
-// version 2 of the License, or (at your option) any later version.
-//
-// Note that the GPL places important restrictions on "derived works", yet
-// it does not provide a detailed definition of that term.  To avoid
-// misunderstandings, we consider an application to constitute a
-// "derivative work" for the purpose of this license if it does any of the
-// following:
-// 1. Integrates source code from Notepad++.
-// 2. Integrates/includes/aggregates Notepad++ into a proprietary executable
-//    installer, such as those produced by InstallShield.
-// 3. Links to a library or executes a program that does any of the above.
+// Copyright (C)2021 Don HO <don.h@free.fr>
+
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// at your option any later version.
 //
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with this program; if not, write to the Free Software
-// Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
 
@@ -66,6 +55,36 @@ void TreeView::destroy()
 
 LRESULT TreeView::runProc(HWND hwnd, UINT Message, WPARAM wParam, LPARAM lParam)
 {
+	if (Message == TVM_EXPAND)
+	{
+		if (wParam & (TVE_COLLAPSE | TVE_EXPAND))
+		{
+			// If TVIS_EXPANDEDONCE flag is set, TVM_EXPAND messages do not generate
+			// TVN_ITEMEXPANDING or TVN_ITEMEXPANDED notifications.
+			// To reset the flag, you must send a TVM_EXPAND message
+			// with the TVE_COLLAPSE and TVE_COLLAPSERESET flags set.
+			// That in turn removes child items which is unwanted.
+			// Below is a workaround for that.
+			TVITEM tvItem = {};
+			tvItem.hItem = reinterpret_cast<HTREEITEM>(lParam);
+			tvItem.mask = TVIF_STATE | TVIF_HANDLE | TVIF_PARAM;
+			tvItem.stateMask = TVIS_EXPANDEDONCE;
+			TreeView_GetItem(_hSelf, &tvItem);
+			// Check if a flag is set.
+			if (tvItem.state & TVIS_EXPANDEDONCE)
+			{
+				// If the flag is set, then manually notify parent that an item is collapsed/expanded
+				// so that it can change icon, etc.
+				NMTREEVIEW nmtv = {};
+				nmtv.hdr.code = TVN_ITEMEXPANDED;
+				nmtv.hdr.hwndFrom = _hSelf;
+				nmtv.hdr.idFrom = 0;
+				nmtv.action = wParam & TVE_COLLAPSE ? TVE_COLLAPSE : TVE_EXPAND;
+				nmtv.itemNew.hItem = tvItem.hItem;
+				::SendMessage(_hParent, WM_NOTIFY, nmtv.hdr.idFrom, reinterpret_cast<LPARAM>(&nmtv));
+			}
+		}
+	}
 	return ::CallWindowProc(_defaultProc, hwnd, Message, wParam, lParam);
 }
 

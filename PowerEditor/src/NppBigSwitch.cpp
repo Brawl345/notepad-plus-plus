@@ -1,29 +1,18 @@
 // This file is part of Notepad++ project
-// Copyright (C)2020 Don HO <don.h@free.fr>
-//
-// This program is free software; you can redistribute it and/or
-// modify it under the terms of the GNU General Public License
-// as published by the Free Software Foundation; either
-// version 2 of the License, or (at your option) any later version.
-//
-// Note that the GPL places important restrictions on "derived works", yet
-// it does not provide a detailed definition of that term.  To avoid
-// misunderstandings, we consider an application to constitute a
-// "derivative work" for the purpose of this license if it does any of the
-// following:
-// 1. Integrates source code from Notepad++.
-// 2. Integrates/includes/aggregates Notepad++ into a proprietary executable
-//    installer, such as those produced by InstallShield.
-// 3. Links to a library or executes a program that does any of the above.
+// Copyright (C)2021 Don HO <don.h@free.fr>
+
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// at your option any later version.
 //
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with this program; if not, write to the Free Software
-// Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
 #include <algorithm>
@@ -228,6 +217,11 @@ LRESULT Notepad_plus::process(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPa
 			return findInFiles();
 		}
 
+		case WM_FINDINPROJECTS:
+		{
+			return findInProjects();
+		}
+
 		case WM_FINDALL_INCURRENTFINDER:
 		{
 			FindersInfo *findInFolderInfo = reinterpret_cast<FindersInfo *>(wParam);
@@ -244,13 +238,19 @@ LRESULT Notepad_plus::process(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPa
 			return TRUE;
 		}
 
+		case WM_REPLACEINPROJECTS:
+		{
+			replaceInProjects();
+			return TRUE;
+		}
+
 		case NPPM_LAUNCHFINDINFILESDLG:
 		{
 			// Find in files function code should be here due to the number of parameters (2) cannot be passed via WM_COMMAND
 			const int strSize = FINDREPLACE_MAXLENGTH;
 			TCHAR str[strSize];
 
-			bool isFirstTime = not _findReplaceDlg.isCreated();
+			bool isFirstTime = !_findReplaceDlg.isCreated();
 			_findReplaceDlg.doDialog(FIND_DLG, _nativeLangSpeaker.isRTL());
 			
 			const NppGUI & nppGui = nppParam.getNppGUI();
@@ -268,13 +268,30 @@ LRESULT Notepad_plus::process(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPa
 			return TRUE;
 		}
 
+		case NPPM_INTERNAL_FINDINPROJECTS:
+		{
+			const int strSize = FINDREPLACE_MAXLENGTH;
+			TCHAR str[strSize];
+
+			bool isFirstTime = not _findReplaceDlg.isCreated();
+			_findReplaceDlg.doDialog(FIND_DLG, _nativeLangSpeaker.isRTL());
+
+			_pEditView->getGenericSelectedText(str, strSize);
+			_findReplaceDlg.setSearchText(str);
+			if (isFirstTime)
+				_nativeLangSpeaker.changeDlgLang(_findReplaceDlg.getHSelf(), "Find");
+			_findReplaceDlg.launchFindInProjectsDlg();
+			_findReplaceDlg.setProjectCheckmarks(NULL, (int) wParam);
+			return TRUE;
+		}
+
 		case NPPM_INTERNAL_FINDINFINDERDLG:
 		{
 			const int strSize = FINDREPLACE_MAXLENGTH;
 			TCHAR str[strSize];
 			Finder *launcher = reinterpret_cast<Finder *>(wParam);
 
-			bool isFirstTime = not _findInFinderDlg.isCreated();
+			bool isFirstTime = !_findInFinderDlg.isCreated();
 
 			_findInFinderDlg.doDialog(launcher, _nativeLangSpeaker.isRTL());
 
@@ -1371,7 +1388,7 @@ LRESULT Notepad_plus::process(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPa
 
 		case NPPM_INTERNAL_FINDKEYCONFLICTS:
 		{
-			if (not wParam || not lParam) // Clean up current session
+			if (!wParam || !lParam) // Clean up current session
 			{
 				delete _pShortcutMapper;
 				_pShortcutMapper = nullptr;
@@ -1429,7 +1446,7 @@ LRESULT Notepad_plus::process(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPa
 
 		case NPPM_INTERNAL_SCROLLBEYONDLASTLINE:
 		{
-			const bool endAtLastLine = not (nppParam.getSVP())._scrollBeyondLastLine;
+			const bool endAtLastLine = !(nppParam.getSVP())._scrollBeyondLastLine;
 			_mainEditView.execute(SCI_SETENDATLASTLINE, endAtLastLine);
 			_subEditView.execute(SCI_SETENDATLASTLINE, endAtLastLine);
 			return TRUE;
@@ -1516,7 +1533,8 @@ LRESULT Notepad_plus::process(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPa
 					::GetCursorPos(&p);
 					ContextMenu scintillaContextmenu;
 					std::vector<MenuItemUnit>& tmp = nppParam.getContextMenuItems();
-					scintillaContextmenu.create(hwnd, tmp, _mainMenuHandle);
+					bool copyLink = (_pEditView->getSelectedTextCount() == 0) && _pEditView->getIndicatorRange(URL_INDIC);
+					scintillaContextmenu.create(hwnd, tmp, _mainMenuHandle, copyLink);
 					scintillaContextmenu.display(p);
 					return TRUE;
 				}
@@ -2108,6 +2126,39 @@ LRESULT Notepad_plus::process(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPa
 			return pluginHomePath.length();
 		}
 
+		case NPPM_GETSETTINGSONCLOUDPATH:
+		{
+			const NppGUI & nppGUI = nppParam.getNppGUI();
+			generic_string settingsOnCloudPath = nppGUI._cloudPath;
+			if (lParam != 0)
+			{
+				if (settingsOnCloudPath.length() >= static_cast<size_t>(wParam))
+				{
+					return 0;
+				}
+				lstrcpy(reinterpret_cast<TCHAR *>(lParam), settingsOnCloudPath.c_str());
+			}
+			return settingsOnCloudPath.length();
+		}
+
+		case NPPM_SETLINENUMBERWIDTHMODE:
+		{
+			if (lParam != LINENUMWIDTH_DYNAMIC && lParam != LINENUMWIDTH_CONSTANT)
+				return FALSE;
+
+			ScintillaViewParams &svp = const_cast<ScintillaViewParams &>(nppParam.getSVP());
+			svp._lineNumberMarginDynamicWidth = lParam == LINENUMWIDTH_DYNAMIC;
+			::SendMessage(hwnd, WM_COMMAND, IDM_VIEW_LINENUMBER, 0);
+
+			return TRUE;
+		}
+
+		case NPPM_GETLINENUMBERWIDTHMODE:
+		{
+			const ScintillaViewParams &svp = nppParam.getSVP();
+			return svp._lineNumberMarginDynamicWidth ? LINENUMWIDTH_DYNAMIC : LINENUMWIDTH_CONSTANT;
+		}
+
 		case NPPM_MSGTOPLUGIN :
 		{
 			return _pluginsManager.relayPluginMessages(message, wParam, lParam);
@@ -2371,7 +2422,7 @@ LRESULT Notepad_plus::process(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPa
 			_mainEditView.execute(SCI_MULTIEDGECLEARALL);
 			_subEditView.execute(SCI_MULTIEDGECLEARALL);
 
-			ScintillaViewParams & svp = (ScintillaViewParams &)nppParam.getSVP();
+			ScintillaViewParams &svp = const_cast<ScintillaViewParams &>(nppParam.getSVP());
 
 			StyleArray & stylers = NppParameters::getInstance().getMiscStylerArray();
 			COLORREF multiEdgeColor = liteGrey;

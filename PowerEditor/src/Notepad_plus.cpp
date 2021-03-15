@@ -1,36 +1,25 @@
 ﻿// This file is part of Notepad++ project
-// Copyright (C)2020 Don HO <don.h@free.fr>
-//
-// This program is free software; you can redistribute it and/or
-// modify it under the terms of the GNU General Public License
-// as published by the Free Software Foundation; either
-// version 2 of the License, or (at your option) any later version.
-//
-// Note that the GPL places important restrictions on "derived works", yet
-// it does not provide a detailed definition of that term.  To avoid
-// misunderstandings, we consider an application to constitute a
-// "derivative work" for the purpose of this license if it does any of the
-// following:
-// 1. Integrates source code from Notepad++.
-// 2. Integrates/includes/aggregates Notepad++ into a proprietary executable
-//    installer, such as those produced by InstallShield.
-// 3. Links to a library or executes a program that does any of the above.
+// Copyright (C)2021 Don HO <don.h@free.fr>
+
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// at your option any later version.
 //
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with this program; if not, write to the Free Software
-// Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <time.h>
 #include <shlwapi.h>
 #include <wininet.h>
 #include "Notepad_plus.h"
 #include "Notepad_plus_Window.h"
-#include "FileDialog.h"
+#include "CustomFileDialog.h"
 #include "Printer.h"
 #include "FileNameStringSplitter.h"
 #include "lesDlgs.h"
@@ -282,8 +271,8 @@ LRESULT Notepad_plus::init(HWND hwnd)
 	_mainEditView.execute(SCI_SETCARETLINEVISIBLE, svp1._currentLineHilitingShow);
 	_subEditView.execute(SCI_SETCARETLINEVISIBLE, svp1._currentLineHilitingShow);
 
-	_mainEditView.execute(SCI_SETENDATLASTLINE, not svp1._scrollBeyondLastLine);
-	_subEditView.execute(SCI_SETENDATLASTLINE, not svp1._scrollBeyondLastLine);
+	_mainEditView.execute(SCI_SETENDATLASTLINE, !svp1._scrollBeyondLastLine);
+	_subEditView.execute(SCI_SETENDATLASTLINE, !svp1._scrollBeyondLastLine);
 
 	if (svp1._doSmoothFont)
 	{
@@ -688,15 +677,15 @@ LRESULT Notepad_plus::init(HWND hwnd)
 	// launch the plugin dlg memorized at the last session
 	//
 
+	DockingManagerData& dmd = nppGUI._dockingData;
+
+	_dockingManager.setDockedContSize(CONT_LEFT, nppGUI._dockingData._leftWidth);
+	_dockingManager.setDockedContSize(CONT_RIGHT, nppGUI._dockingData._rightWidth);
+	_dockingManager.setDockedContSize(CONT_TOP, nppGUI._dockingData._topHeight);
+	_dockingManager.setDockedContSize(CONT_BOTTOM, nppGUI._dockingData._bottomHight);
+
 	if (!nppGUI._isCmdlineNosessionActivated)
 	{
-		DockingManagerData& dmd = nppGUI._dockingData;
-
-		_dockingManager.setDockedContSize(CONT_LEFT, nppGUI._dockingData._leftWidth);
-		_dockingManager.setDockedContSize(CONT_RIGHT, nppGUI._dockingData._rightWidth);
-		_dockingManager.setDockedContSize(CONT_TOP, nppGUI._dockingData._topHeight);
-		_dockingManager.setDockedContSize(CONT_BOTTOM, nppGUI._dockingData._bottomHight);
-
 		for (size_t i = 0, len = dmd._pluginDockInfo.size(); i < len; ++i)
 		{
 			PluginDlgDockingInfo& pdi = dmd._pluginDockInfo[i];
@@ -1524,42 +1513,79 @@ void Notepad_plus::getMatchedFileNames(const TCHAR *dir, const vector<generic_st
 	::FindClose(hFile);
 }
 
-std::mutex replaceInFiles_mutex;
-
-bool Notepad_plus::replaceInFiles()
+bool Notepad_plus::createFilelistForFiles(vector<generic_string> & fileNames)
 {
-	std::lock_guard<std::mutex> lock(replaceInFiles_mutex);
-
 	const TCHAR *dir2Search = _findReplaceDlg.getDir2Search();
 	if (!dir2Search[0] || !::PathFileExists(dir2Search))
 	{
 		return false;
 	}
 
+	vector<generic_string> patterns2Match;
+	_findReplaceDlg.getAndValidatePatterns(patterns2Match);
+
 	bool isRecursive = _findReplaceDlg.isRecursive();
 	bool isInHiddenDir = _findReplaceDlg.isInHiddenDir();
+	getMatchedFileNames(dir2Search, patterns2Match, fileNames, isRecursive, isInHiddenDir);
+	return true;
+}
+
+bool Notepad_plus::createFilelistForProjects(vector<generic_string> & fileNames)
+{
+	vector<generic_string> patterns2Match;
+	_findReplaceDlg.getAndValidatePatterns(patterns2Match);
+	bool somethingIsSelected = false; // at least one Project Panel is open and checked
+
+	if (_findReplaceDlg.isProjectPanel_1() && _pProjectPanel_1 && !_pProjectPanel_1->isClosed())
+	{
+		_pProjectPanel_1->enumWorkSpaceFiles (NULL, patterns2Match, fileNames);
+		somethingIsSelected = true;
+	}
+	if (_findReplaceDlg.isProjectPanel_2() && _pProjectPanel_2 && !_pProjectPanel_2->isClosed())
+	{
+		_pProjectPanel_2->enumWorkSpaceFiles (NULL, patterns2Match, fileNames);
+		somethingIsSelected = true;
+	}
+	if (_findReplaceDlg.isProjectPanel_3() && _pProjectPanel_3 && !_pProjectPanel_3->isClosed())
+	{
+		_pProjectPanel_3->enumWorkSpaceFiles (NULL, patterns2Match, fileNames);
+		somethingIsSelected = true;
+	}
+	return somethingIsSelected;
+}
+
+std::mutex replaceInFiles_mutex;
+
+bool Notepad_plus::replaceInFiles()
+{
+	std::lock_guard<std::mutex> lock(replaceInFiles_mutex);
+
+	std::vector<generic_string> fileNames;
+	if (!createFilelistForFiles(fileNames))
+		return false;
+
+	return replaceInFilelist(fileNames);
+}
+
+bool Notepad_plus::replaceInProjects()
+{
+	std::lock_guard<std::mutex> lock(replaceInFiles_mutex);
+
+	std::vector<generic_string> fileNames;
+	if (!createFilelistForProjects(fileNames))
+		return false;
+
+	return replaceInFilelist(fileNames);
+}
+
+bool Notepad_plus::replaceInFilelist(std::vector<generic_string> & fileNames)
+{
 	int nbTotal = 0;
 
 	ScintillaEditView *pOldView = _pEditView;
 	_pEditView = &_invisibleEditView;
 	Document oldDoc = _invisibleEditView.execute(SCI_GETDOCPOINTER);
 	Buffer * oldBuf = _invisibleEditView.getCurrentBuffer();	//for manually setting the buffer, so notifications can be handled properly
-
-	vector<generic_string> patterns2Match;
-	_findReplaceDlg.getPatterns(patterns2Match);
-	if (patterns2Match.size() == 0)
-	{
-		_findReplaceDlg.setFindInFilesDirFilter(NULL, TEXT("*.*"));
-		_findReplaceDlg.getPatterns(patterns2Match);
-	}
-	else if (allPatternsAreExclusion(patterns2Match))
-	{
-		patterns2Match.insert(patterns2Match.begin(), TEXT("*.*"));
-	}
-
-	vector<generic_string> fileNames;
-
-	getMatchedFileNames(dir2Search, patterns2Match, fileNames, isRecursive, isInHiddenDir);
 
 	Progress progress(_pPublicInterface->getHinst());
 	size_t filesCount = fileNames.size();
@@ -1569,7 +1595,10 @@ bool Notepad_plus::replaceInFiles()
 	{
 		if (filesCount >= 200)
 			filesPerPercent = filesCount / 100;
-		progress.open(_findReplaceDlg.getHSelf(), TEXT("Replace In Files progress..."));
+		
+		generic_string msg = _nativeLangSpeaker.getLocalizedStrFromID(
+			"replace-in-files-progress-title", TEXT("Replace In Files progress..."));
+		progress.open(_findReplaceDlg.getHSelf(), msg.c_str());
 	}
 
 	for (size_t i = 0, updateOnCount = filesPerPercent; i < filesCount; ++i)
@@ -1659,7 +1688,10 @@ bool Notepad_plus::findInFinderFiles(FindersInfo *findInFolderInfo)
 	{
 		if (filesCount >= 200)
 			filesPerPercent = filesCount / 100;
-		progress.open(_findReplaceDlg.getHSelf(), TEXT("Find In Files progress..."));
+		
+		generic_string msg = _nativeLangSpeaker.getLocalizedStrFromID(
+			"find-in-files-progress-title", TEXT("Find In Files progress..."));
+		progress.open(_findReplaceDlg.getHSelf(), msg.c_str());
 	}
 
 	for (size_t i = 0, updateOnCount = filesPerPercent; i < filesCount; ++i)
@@ -1711,34 +1743,28 @@ bool Notepad_plus::findInFinderFiles(FindersInfo *findInFolderInfo)
 
 bool Notepad_plus::findInFiles()
 {
-	const TCHAR *dir2Search = _findReplaceDlg.getDir2Search();
-
-	if (not dir2Search[0] || not ::PathFileExists(dir2Search))
-	{
+	std::vector<generic_string> fileNames;
+	if (! createFilelistForFiles(fileNames))
 		return false;
-	}
 
-	bool isRecursive = _findReplaceDlg.isRecursive();
-	bool isInHiddenDir = _findReplaceDlg.isInHiddenDir();
+	return findInFilelist(fileNames);
+}
+
+bool Notepad_plus::findInProjects()
+{
+	vector<generic_string> fileNames;
+	if (! createFilelistForProjects(fileNames))
+		return false;
+
+	return findInFilelist(fileNames);
+}
+
+bool Notepad_plus::findInFilelist(std::vector<generic_string> & fileNames)
+{
 	int nbTotal = 0;
 	ScintillaEditView *pOldView = _pEditView;
 	_pEditView = &_invisibleEditView;
 	Document oldDoc = _invisibleEditView.execute(SCI_GETDOCPOINTER);
-
-	vector<generic_string> patterns2Match;
-	_findReplaceDlg.getPatterns(patterns2Match);
-	if (patterns2Match.size() == 0)
-	{
-		_findReplaceDlg.setFindInFilesDirFilter(NULL, TEXT("*.*"));
-		_findReplaceDlg.getPatterns(patterns2Match);
-	}
-	else if (allPatternsAreExclusion(patterns2Match))
-	{
-		patterns2Match.insert(patterns2Match.begin(), TEXT("*.*"));
-	}
-
-	vector<generic_string> fileNames;
-	getMatchedFileNames(dir2Search, patterns2Match, fileNames, isRecursive, isInHiddenDir);
 
 	_findReplaceDlg.beginNewFilesSearch();
 
@@ -1751,7 +1777,10 @@ bool Notepad_plus::findInFiles()
 	{
 		if (filesCount >= 200)
 			filesPerPercent = filesCount / 100;
-		progress.open(_findReplaceDlg.getHSelf(), TEXT("Find In Files progress..."));
+
+		generic_string msg = _nativeLangSpeaker.getLocalizedStrFromID(
+			"find-in-files-progress-title", TEXT("Find In Files progress..."));
+		progress.open(_findReplaceDlg.getHSelf(), msg.c_str());
 	}
 
 	const bool isEntireDoc = true;
@@ -2100,7 +2129,7 @@ void Notepad_plus::checkDocState()
 	bool isSysReadOnly = curBuf->getFileReadOnly();
 	enableCommand(IDM_EDIT_CLEARREADONLY, isSysReadOnly, MENU);
 
-	bool doEnable = not (curBuf->isMonitoringOn() || isSysReadOnly);
+	bool doEnable = !(curBuf->isMonitoringOn() || isSysReadOnly);
 	enableCommand(IDM_EDIT_SETREADONLY, doEnable, MENU);
 
 	bool isUserReadOnly = curBuf->getUserReadOnly();
@@ -2126,7 +2155,7 @@ void Notepad_plus::checkDocState()
 	if (_pAnsiCharPanel)
 		_pAnsiCharPanel->switchEncoding();
 
-	enableCommand(IDM_VIEW_MONITORING, not curBuf->isUntitled(), MENU | TOOLBAR);
+	enableCommand(IDM_VIEW_MONITORING, !curBuf->isUntitled(), MENU | TOOLBAR);
 	checkMenuItem(IDM_VIEW_MONITORING, curBuf->isMonitoringOn());
 	_toolBar.setCheck(IDM_VIEW_MONITORING, curBuf->isMonitoringOn());
 }
@@ -2628,7 +2657,7 @@ bool isUrlQueryDelimiter(TCHAR const c)
 	return false;
 }
 
-bool isUrlSchemeSupported(INTERNET_SCHEME s)
+bool isUrlSchemeSupported(INTERNET_SCHEME s, TCHAR *url)
 {
 	switch (s)
 	{
@@ -2638,6 +2667,17 @@ bool isUrlSchemeSupported(INTERNET_SCHEME s)
 		case INTERNET_SCHEME_MAILTO:
 		case INTERNET_SCHEME_FILE:
 			return true;
+	}
+	generic_string const mySchemes = (NppParameters::getInstance()).getNppGUI()._uriSchemes + TEXT(" ");
+	TCHAR *p = (TCHAR *)mySchemes.c_str();
+	while (*p)
+	{
+		int i = 0;
+		while (p [i] && (p [i] != ' ')) i++;
+		if (i == 0) return false;
+		if (generic_strnicmp (url, p, i) == 0) return true;
+		p += i;
+		while (*p == ' ') p++;
 	}
 	return false;
 }
@@ -2863,7 +2903,7 @@ bool isUrl(TCHAR * text, int textLen, int start, int* segmentLen)
 			URL_COMPONENTS url;
 			memset (& url, 0, sizeof(url));
 			url.dwStructSize = sizeof(url);
-			bool r  = InternetCrackUrl(& text [start], len, 0, & url) && isUrlSchemeSupported(url.nScheme);
+			bool r  = InternetCrackUrl(& text [start], len, 0, & url) && isUrlSchemeSupported(url.nScheme, & text [start]);
 			if (r)
 			{
 				while (removeUnwantedTrailingCharFromUrl (& text [start], & len));
@@ -3015,7 +3055,7 @@ void Notepad_plus::maintainIndentation(TCHAR ch)
 		return;
 
 	if (type == L_C || type == L_CPP || type == L_JAVA || type == L_CS || type == L_OBJC ||
-		type == L_PHP || type == L_JS || type == L_JAVASCRIPT || type == L_JSP || type == L_CSS || type == L_PERL || type == L_RUST || type == L_POWERSHELL)
+		type == L_PHP || type == L_JS || type == L_JAVASCRIPT || type == L_JSP || type == L_CSS || type == L_PERL || type == L_RUST || type == L_POWERSHELL || type == L_JSON)
 	{
 		if (((eolMode == SC_EOL_CRLF || eolMode == SC_EOL_LF) && ch == '\n') ||
 			(eolMode == SC_EOL_CR && ch == '\r'))
@@ -3058,7 +3098,7 @@ void Notepad_plus::maintainIndentation(TCHAR ch)
 				_pEditView->setLineIndent(curLine, indentAmountPrevLine);
 			}
 			// These languages do no support single line control structures without braces.
-			else if (type == L_PERL || type == L_RUST || type == L_POWERSHELL)
+			else if (type == L_PERL || type == L_RUST || type == L_POWERSHELL || type == L_JSON)
 			{
 				_pEditView->setLineIndent(curLine, indentAmountPrevLine);
 			}
@@ -3172,14 +3212,14 @@ void Notepad_plus::maintainIndentation(TCHAR ch)
 
 BOOL Notepad_plus::processFindAccel(MSG *msg) const
 {
-	if (not ::IsChild(_findReplaceDlg.getHSelf(), ::GetFocus()))
+	if (!::IsChild(_findReplaceDlg.getHSelf(), ::GetFocus()))
 		return FALSE;
 	return ::TranslateAccelerator(_findReplaceDlg.getHSelf(), _accelerator.getFindAccTable(), msg);
 }
 
 BOOL Notepad_plus::processIncrFindAccel(MSG *msg) const
 {
-	if (not ::IsChild(_incrementFindDlg.getHSelf(), ::GetFocus()))
+	if (!::IsChild(_incrementFindDlg.getHSelf(), ::GetFocus()))
 		return FALSE;
 	return ::TranslateAccelerator(_incrementFindDlg.getHSelf(), _accelerator.getIncrFindAccTable(), msg);
 }
@@ -3777,7 +3817,7 @@ void Notepad_plus::dropFiles(HDROP hdrop)
 				switchToFile(lastOpened);
 			}
 		}
-		else if (not isOldMode && (folderPaths.size() != 0 && filePaths.size() != 0)) // new mode && both folders & files
+		else if (!isOldMode && (folderPaths.size() != 0 && filePaths.size() != 0)) // new mode && both folders & files
 		{
 			// display error & do nothing
 			_nativeLangSpeaker.messageBox("DroppingFolderAsProjectModeWarning",
@@ -3786,7 +3826,7 @@ void Notepad_plus::dropFiles(HDROP hdrop)
 				TEXT("Invalid action"),
 				MB_OK | MB_APPLMODAL);
 		}
-		else if (not isOldMode && (folderPaths.size() != 0 && filePaths.size() == 0)) // new mode && only folders
+		else if (!isOldMode && (folderPaths.size() != 0 && filePaths.size() == 0)) // new mode && only folders
 		{
 			// process new mode
 			generic_string emptyStr;
@@ -4618,7 +4658,7 @@ bool Notepad_plus::doBlockComment(comment_mode currCommentMode)
 	const TCHAR aSpace[] { TEXT(" ") };
 
 	//Only values that have passed through will be assigned, to be sure they are valid!
-	if (not isSingleLineAdvancedMode)
+	if (!isSingleLineAdvancedMode)
 	{
 		comment = commentLineSymbol;
 
@@ -4681,7 +4721,7 @@ bool Notepad_plus::doBlockComment(comment_mode currCommentMode)
 
    		if (currCommentMode != cm_comment) // uncomment/toggle
 		{
-			if (not isSingleLineAdvancedMode)
+			if (!isSingleLineAdvancedMode)
 			{
 				// In order to do get case insensitive comparison use strnicmp() instead case-sensitive comparison.
 				//      Case insensitive comparison is needed e.g. for "REM" and "rem" in Batchfiles.
@@ -4769,7 +4809,7 @@ bool Notepad_plus::doBlockComment(comment_mode currCommentMode)
 
 		if (currCommentMode != cm_uncomment) // comment/toggle
 		{
-			if (not isSingleLineAdvancedMode)
+			if (!isSingleLineAdvancedMode)
 			{
 				_pEditView->insertGenericTextFrom(lineIndent, comment.c_str());
 
@@ -5879,15 +5919,17 @@ std::vector<generic_string> Notepad_plus::loadCommandlineParams(const TCHAR * co
 		Session session2Load;
 		if ((NppParameters::getInstance()).loadSession(session2Load, fnss.getFileName(0)))
 		{
-			loadSession(session2Load);
+			const bool isSnapshotMode = false;
+			const bool shouldLoadFileBrowser = true;
+			loadSession(session2Load, isSnapshotMode, shouldLoadFileBrowser);
 		}
 		return std::vector<generic_string>();
 	}
 
  	LangType lt = pCmdParams->_langType;
-	int ln =  pCmdParams->_line2go;
-    int cn = pCmdParams->_column2go;
-    int cpos = pCmdParams->_pos2go;
+	int lineNumber =  pCmdParams->_line2go;
+	int columnNumber = pCmdParams->_column2go;
+	int positionNumber = pCmdParams->_pos2go;
 	bool recursive = pCmdParams->_isRecursive;
 	bool readOnly = pCmdParams->_isReadOnly;
 	bool openFoldersAsWorkspace = pCmdParams->_openFoldersAsWorkspace;
@@ -5917,25 +5959,32 @@ std::vector<generic_string> Notepad_plus::loadCommandlineParams(const TCHAR * co
 			pBuf->setLangType(lt);
 		}
 
-		if (ln != -1 || cpos != -1)
-		{	//we have to move the cursor manually
+		if (lineNumber >= 0 || positionNumber >= 0)
+		{
+			//we have to move the cursor manually
 			int iView = currentView();	//store view since fileswitch can cause it to change
 			switchToFile(bufID);	//switch to the file. No deferred loading, but this way we can easily move the cursor to the right position
 
-			if (cpos != -1)
+			if (positionNumber >= 0)
 			{
-				_pEditView->execute(SCI_GOTOPOS, cpos);
+				if (positionNumber > 0)
+				{
+					// make sure not jumping into the middle of a multibyte character
+					// or into the middle of a CR/LF pair for Windows files
+					auto before = _pEditView->execute(SCI_POSITIONBEFORE, positionNumber);
+					positionNumber = static_cast<int>(_pEditView->execute(SCI_POSITIONAFTER, before));
+				}
+				_pEditView->execute(SCI_GOTOPOS, positionNumber);
 			}
-            else
-			if (cn == -1)
+			else if (columnNumber < 0)
 			{
-				_pEditView->execute(SCI_GOTOLINE, ln-1);
+				_pEditView->execute(SCI_GOTOLINE, lineNumber - 1);
 			}
-            else
-            {
-                auto pos = _pEditView->execute(SCI_FINDCOLUMN, ln-1, cn-1);
-                _pEditView->execute(SCI_GOTOPOS, pos);
-            }
+			else
+			{
+				auto pos = _pEditView->execute(SCI_FINDCOLUMN, lineNumber - 1, columnNumber - 1);
+				_pEditView->execute(SCI_GOTOPOS, pos);
+			}
 
 			_pEditView->scrollPosToCenter(_pEditView->execute(SCI_GETCURRENTPOS));
 
@@ -6004,12 +6053,13 @@ void Notepad_plus::setFindReplaceFolderFilter(const TCHAR *dir, const TCHAR *fil
 
 vector<generic_string> Notepad_plus::addNppComponents(const TCHAR *destDir, const TCHAR *extFilterName, const TCHAR *extFilter)
 {
-	FileDialog fDlg(_pPublicInterface->getHSelf(), _pPublicInterface->getHinst());
-    fDlg.setExtFilter(extFilterName, extFilter, NULL);
+	CustomFileDialog fDlg(_pPublicInterface->getHSelf());
+	fDlg.setExtFilter(extFilterName, extFilter);
 
     vector<generic_string> copiedFiles;
 
-    if (stringVector *pfns = fDlg.doOpenMultiFilesDlg())
+	const auto& fns = fDlg.doOpenMultiFilesDlg();
+    if (!fns.empty())
     {
         // Get plugins dir
 		generic_string destDirName = (NppParameters::getInstance()).getNppPath();
@@ -6022,15 +6072,15 @@ vector<generic_string> Notepad_plus::addNppComponents(const TCHAR *destDir, cons
 
         destDirName += TEXT("\\");
 
-        size_t sz = pfns->size();
+        size_t sz = fns.size();
         for (size_t i = 0 ; i < sz ; ++i)
         {
-            if (::PathFileExists(pfns->at(i).c_str()))
+            if (::PathFileExists(fns.at(i).c_str()))
             {
                 // copy to plugins directory
                 generic_string destName = destDirName;
-                destName += ::PathFindFileName(pfns->at(i).c_str());
-                if (::CopyFile(pfns->at(i).c_str(), destName.c_str(), FALSE))
+                destName += ::PathFindFileName(fns.at(i).c_str());
+                if (::CopyFile(fns.at(i).c_str(), destName.c_str(), FALSE))
                     copiedFiles.push_back(destName.c_str());
             }
         }
@@ -6040,12 +6090,13 @@ vector<generic_string> Notepad_plus::addNppComponents(const TCHAR *destDir, cons
 
 vector<generic_string> Notepad_plus::addNppPlugins(const TCHAR *extFilterName, const TCHAR *extFilter)
 {
-	FileDialog fDlg(_pPublicInterface->getHSelf(), _pPublicInterface->getHinst());
-    fDlg.setExtFilter(extFilterName, extFilter, NULL);
+	CustomFileDialog fDlg(_pPublicInterface->getHSelf());
+    fDlg.setExtFilter(extFilterName, extFilter);
 
     vector<generic_string> copiedFiles;
 
-    if (stringVector *pfns = fDlg.doOpenMultiFilesDlg())
+	const auto& fns = fDlg.doOpenMultiFilesDlg();
+	if (!fns.empty())
     {
         // Get plugins dir
 		generic_string destDirName = (NppParameters::getInstance()).getPluginRootDir();
@@ -6055,15 +6106,15 @@ vector<generic_string> Notepad_plus::addNppPlugins(const TCHAR *extFilterName, c
             ::CreateDirectory(destDirName.c_str(), NULL);
         }
 
-        size_t sz = pfns->size();
+        size_t sz = fns.size();
         for (size_t i = 0 ; i < sz ; ++i)
         {
-            if (::PathFileExists(pfns->at(i).c_str()))
+            if (::PathFileExists(fns.at(i).c_str()))
             {
                 // copy to plugins directory
                 generic_string destName = destDirName;
 				
-				generic_string nameExt = ::PathFindFileName(pfns->at(i).c_str());
+				generic_string nameExt = ::PathFindFileName(fns.at(i).c_str());
 				auto pos = nameExt.find_last_of(TEXT("."));
 				if (pos == generic_string::npos)
 					continue;
@@ -6076,7 +6127,7 @@ vector<generic_string> Notepad_plus::addNppPlugins(const TCHAR *extFilterName, c
 				}
 				PathAppend(destName, nameExt);
 
-                if (::CopyFile(pfns->at(i).c_str(), destName.c_str(), FALSE))
+                if (::CopyFile(fns.at(i).c_str(), destName.c_str(), FALSE))
                     copiedFiles.push_back(destName.c_str());
             }
         }
@@ -6328,8 +6379,10 @@ void Notepad_plus::launchClipboardHistoryPanel()
 
 		_pClipboardHistoryPanel->init(_pPublicInterface->getHinst(), _pPublicInterface->getHSelf(), &_pEditView);
 
+		NativeLangSpeaker *pNativeSpeaker = (NppParameters::getInstance()).getNativeLangSpeaker();
+		bool isRTL = pNativeSpeaker->isRTL();
 		tTbData	data = {0};
-		_pClipboardHistoryPanel->create(&data);
+		_pClipboardHistoryPanel->create(&data, isRTL);
 
 		::SendMessage(_pPublicInterface->getHSelf(), NPPM_MODELESSDIALOG, MODELESSDIALOGREMOVE, reinterpret_cast<LPARAM>(_pClipboardHistoryPanel->getHSelf()));
 		// define the default docking behaviour
@@ -6341,7 +6394,7 @@ void Notepad_plus::launchClipboardHistoryPanel()
 		// in this case is DOCKABLE_DEMO_INDEX
 		// In the case of Notepad++ internal function, it'll be the command ID which triggers this dialog
 		data.dlgID = IDM_EDIT_CLIPBOARDHISTORY_PANEL;
-		NativeLangSpeaker *pNativeSpeaker = (NppParameters::getInstance()).getNativeLangSpeaker();
+
 		generic_string title_temp = pNativeSpeaker->getAttrNameStr(CH_PROJECTPANELTITLE, "ClipboardHistory", "PanelTitle");
 		static TCHAR title[32];
 		if (title_temp.length() < 32)
@@ -6369,9 +6422,10 @@ void Notepad_plus::launchFileSwitcherPanel()
 		_pFileSwitcherPanel = new VerticalFileSwitcher;
 		HIMAGELIST hImgLst = _docTabIconList.getHandle();
 		_pFileSwitcherPanel->init(_pPublicInterface->getHinst(), _pPublicInterface->getHSelf(), hImgLst);
-
+		NativeLangSpeaker *pNativeSpeaker = (NppParameters::getInstance()).getNativeLangSpeaker();
+		bool isRTL = pNativeSpeaker->isRTL();
 		tTbData	data = {0};
-		_pFileSwitcherPanel->create(&data);
+		_pFileSwitcherPanel->create(&data, isRTL);
 
 		::SendMessage(_pPublicInterface->getHSelf(), NPPM_MODELESSDIALOG, MODELESSDIALOGREMOVE, reinterpret_cast<LPARAM>(_pFileSwitcherPanel->getHSelf()));
 		// define the default docking behaviour
@@ -6384,7 +6438,6 @@ void Notepad_plus::launchFileSwitcherPanel()
 		// In the case of Notepad++ internal function, it'll be the command ID which triggers this dialog
 		data.dlgID = IDM_VIEW_FILESWITCHER_PANEL;
 
-		NativeLangSpeaker *pNativeSpeaker = (NppParameters::getInstance()).getNativeLangSpeaker();
 		generic_string title_temp = pNativeSpeaker->getAttrNameStr(FS_PROJECTPANELTITLE, "DocSwitcher", "PanelTitle");
 		static TCHAR title[32];
 		if (title_temp.length() < 32)
@@ -6411,8 +6464,10 @@ void Notepad_plus::launchAnsiCharPanel()
 		_pAnsiCharPanel = new AnsiCharPanel();
 		_pAnsiCharPanel->init(_pPublicInterface->getHinst(), _pPublicInterface->getHSelf(), &_pEditView);
 
+		NativeLangSpeaker *pNativeSpeaker = (NppParameters::getInstance()).getNativeLangSpeaker();
+		bool isRTL = pNativeSpeaker->isRTL();
 		tTbData	data = {0};
-		_pAnsiCharPanel->create(&data);
+		_pAnsiCharPanel->create(&data, isRTL);
 
 		::SendMessage(_pPublicInterface->getHSelf(), NPPM_MODELESSDIALOG, MODELESSDIALOGREMOVE, reinterpret_cast<LPARAM>(_pAnsiCharPanel->getHSelf()));
 		// define the default docking behaviour
@@ -6425,7 +6480,6 @@ void Notepad_plus::launchAnsiCharPanel()
 		// In the case of Notepad++ internal function, it'll be the command ID which triggers this dialog
 		data.dlgID = IDM_EDIT_CHAR_PANEL;
 
-		NativeLangSpeaker *pNativeSpeaker = (NppParameters::getInstance()).getNativeLangSpeaker();
 		generic_string title_temp = pNativeSpeaker->getAttrNameStr(AI_PROJECTPANELTITLE, "AsciiInsertion", "PanelTitle");
 		static TCHAR title[85];
 		if (title_temp.length() < 85)
@@ -6454,7 +6508,7 @@ void Notepad_plus::launchFileBrowser(const vector<generic_string> & folders, con
 
 		tTbData	data;
 		memset(&data, 0, sizeof(data));
-		_pFileBrowser->create(&data);
+		_pFileBrowser->create(&data, _nativeLangSpeaker.isRTL());
 		data.pszName = TEXT("ST");
 
 		::SendMessage(_pPublicInterface->getHSelf(), NPPM_MODELESSDIALOG, MODELESSDIALOGREMOVE, reinterpret_cast<LPARAM>(_pFileBrowser->getHSelf()));
@@ -6551,10 +6605,11 @@ void Notepad_plus::launchProjectPanel(int cmdID, ProjectPanel ** pProjPanel, int
 		(*pProjPanel) = new ProjectPanel;
 		(*pProjPanel)->init(_pPublicInterface->getHinst(), _pPublicInterface->getHSelf(), panelID);
 		(*pProjPanel)->setWorkSpaceFilePath(nppParam.getWorkSpaceFilePath(panelID));
-
+		NativeLangSpeaker *pNativeSpeaker = (NppParameters::getInstance()).getNativeLangSpeaker();
+		bool isRTL = pNativeSpeaker->isRTL();
 		tTbData	data;
 		memset(&data, 0, sizeof(data));
-		(*pProjPanel)->create(&data);
+		(*pProjPanel)->create(&data, isRTL);
 		data.pszName = TEXT("ST");
 
 		::SendMessage(_pPublicInterface->getHSelf(), NPPM_MODELESSDIALOG, MODELESSDIALOGREMOVE, reinterpret_cast<LPARAM>((*pProjPanel)->getHSelf()));
@@ -6568,7 +6623,6 @@ void Notepad_plus::launchProjectPanel(int cmdID, ProjectPanel ** pProjPanel, int
 		// In the case of Notepad++ internal function, it'll be the command ID which triggers this dialog
 		data.dlgID = cmdID;
 
-		NativeLangSpeaker *pNativeSpeaker = (NppParameters::getInstance()).getNativeLangSpeaker();
 		generic_string title_no = to_wstring (panelID + 1);
 		generic_string title_temp = pNativeSpeaker->getAttrNameStr(PM_PROJECTPANELTITLE, "ProjectManager", "PanelTitle") + TEXT(" ") + title_no;
 		(*pProjPanel)->setPanelTitle(title_temp);
@@ -6664,7 +6718,6 @@ void Notepad_plus::launchFunctionList()
 		// in this case is DOCKABLE_DEMO_INDEX
 		// In the case of Notepad++ internal function, it'll be the command ID which triggers this dialog
 		data.dlgID = IDM_VIEW_FUNC_LIST;
-
 		NativeLangSpeaker *pNativeSpeaker = (NppParameters::getInstance()).getNativeLangSpeaker();
 		generic_string title_temp = pNativeSpeaker->getAttrNameStr(FL_PANELTITLE, FL_FUCTIONLISTROOTNODE, "PanelTitle");
 
@@ -6852,7 +6905,7 @@ static const QuoteParams quotes[] =
 	{TEXT("Anonymous #110"), QuoteParams::rapid, true, SC_CP_UTF8, L_TEXT, TEXT("A programmer had a problem, so he decided to use threads.\nNow 2 has. He problems")},
 	{TEXT("Anonymous #111"), QuoteParams::rapid, true, SC_CP_UTF8, L_TEXT, TEXT("I love how the internet has improved people's grammar far more than any English teacher has.\nIf you write \"your\" instead of \"you're\" in English class, all you get is a red mark.\nMess up on the internet, and may God have mercy on your soul.")},
 	{TEXT("Anonymous #112"), QuoteParams::rapid, true, SC_CP_UTF8, L_CSS, TEXT("#hulk {\n    height: 200%;\n    width: 200%;\n    color: green;\n}\n")},
-	//{TEXT("Anonymous #113"), QuoteParams::rapid, false, SC_CP_UTF8, L_TEXT, TEXT("")},
+	{TEXT("Anonymous #113"), QuoteParams::rapid, false, SC_CP_UTF8, L_TEXT, TEXT("A colon can completely change the meaning of a sentence. For example:\n- Jane ate her friend's sandwich.\n- Jane ate her friend's colon.")},
 	{TEXT("Anonymous #114"), QuoteParams::rapid, true, SC_CP_UTF8, L_TEXT, TEXT("How can you face your problem if your problem is your face?")},
 	{TEXT("Anonymous #115"), QuoteParams::slow, false, SC_CP_UTF8, L_TEXT, TEXT("YOLOLO:\nYou Only LOL Once.")},
 	{TEXT("Anonymous #116"), QuoteParams::rapid, true, SC_CP_UTF8, L_TEXT, TEXT("Every exit is an entrance to new experiences.")},
@@ -6904,6 +6957,9 @@ static const QuoteParams quotes[] =
 	{TEXT("Anonymous #162"), QuoteParams::rapid, false, SC_CP_UTF8, L_TEXT, TEXT("Psychologist: Lie down please.\n8: No, thank you.If I do, this session will never reach the end.") },
 	{TEXT("Anonymous #163"), QuoteParams::slow, false, SC_CP_UTF8, L_TEXT, TEXT("I love the way the earth rotates,\nit really makes my day.") },
 	{TEXT("Anonymous #164"), QuoteParams::slow, false, SC_CP_UTF8, L_TEXT, TEXT("Homonyms are a waist of thyme.") },
+	{TEXT("Anonymous #165"), QuoteParams::rapid, false, SC_CP_UTF8, L_TEXT, TEXT("What's the difference between a police officer and a bullet?\nWhen a bullet kills someone else, you know it's been fired.") },
+	{TEXT("Anonymous #166"), QuoteParams::rapid, false, SC_CP_UTF8, L_TEXT, TEXT("What has 4 letters\nsometimes 9 letters\nbut never has 5 letters") },
+	{TEXT("Anonymous #167"), QuoteParams::slow, false, SC_CP_UTF8, L_TEXT, TEXT("The 'h' in \"software development\" stands for \"happiness\".") },
 	{TEXT("A developer"), QuoteParams::slow, false, SC_CP_UTF8, L_TEXT, TEXT("No hugs & kisses.\nOnly bugs & fixes.") },
 	{TEXT("Elon Musk"), QuoteParams::rapid, false, SC_CP_UTF8, L_TEXT, TEXT("Don't set your password as your child's name.\nName your child after your password.") },
 	{TEXT("OOP"), QuoteParams::slow, false, SC_CP_UTF8, L_TEXT, TEXT("If you want to treat women as objects,\ndo it with class.")},

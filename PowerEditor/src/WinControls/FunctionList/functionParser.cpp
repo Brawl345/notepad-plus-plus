@@ -1,29 +1,18 @@
 // This file is part of Notepad++ project
-// Copyright (C)2020 Don HO <don.h@free.fr>
-//
-// This program is free software; you can redistribute it and/or
-// modify it under the terms of the GNU General Public License
-// as published by the Free Software Foundation; either
-// version 2 of the License, or (at your option) any later version.
-//
-// Note that the GPL places important restrictions on "derived works", yet
-// it does not provide a detailed definition of that term.  To avoid      
-// misunderstandings, we consider an application to constitute a          
-// "derivative work" for the purpose of this license if it does any of the
-// following:                                                             
-// 1. Integrates source code from Notepad++.
-// 2. Integrates/includes/aggregates Notepad++ into a proprietary executable
-//    installer, such as those produced by InstallShield.
-// 3. Links to a library or executes a program that does any of the above.
+// Copyright (C)2021 Don HO <don.h@free.fr>
+
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// at your option any later version.
 //
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with this program; if not, write to the Free Software
-// Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <shlwapi.h>
 #include "ScintillaEditView.h"
@@ -41,12 +30,19 @@ FunctionParsersManager::~FunctionParsersManager()
 	}
 }
 
-bool FunctionParsersManager::init(const generic_string& xmlDirPath, ScintillaEditView ** ppEditView)
+bool FunctionParsersManager::init(const generic_string& xmlDirPath, const generic_string& xmlInstalledPath, ScintillaEditView ** ppEditView)
 {
 	_ppEditView = ppEditView;
 	_xmlDirPath = xmlDirPath;
+	_xmlDirInstalledPath = xmlInstalledPath;
 
-	return getOverrideMapFromXmlTree();
+	bool isOK = getOverrideMapFromXmlTree(_xmlDirPath);
+	if (isOK)
+		return true;
+	else if (_xmlDirPath != _xmlDirInstalledPath && !_xmlDirInstalledPath.empty())
+		return getOverrideMapFromXmlTree(_xmlDirInstalledPath);
+	else
+		return false;
 }
 
 bool FunctionParsersManager::getZonePaserParameters(TiXmlNode *classRangeParser, generic_string &mainExprStr, generic_string &openSymboleStr, generic_string &closeSymboleStr, std::vector<generic_string> &classNameExprArray, generic_string &functionExprStr, std::vector<generic_string> &functionNameExprArray)
@@ -143,9 +139,9 @@ bool FunctionParsersManager::getUnitPaserParameters(TiXmlNode *functionParser, g
 }
 
 
-bool FunctionParsersManager::loadFuncListFromXmlTree(LangType lType, const generic_string& overrideId, int udlIndex)
+bool FunctionParsersManager::loadFuncListFromXmlTree(generic_string & xmlDirPath, LangType lType, const generic_string& overrideId, int udlIndex)
 {
-	generic_string funcListRulePath = _xmlDirPath;
+	generic_string funcListRulePath = xmlDirPath;
 	funcListRulePath += TEXT("\\");
 	int index = -1;
 	if (lType == L_USER) // UDL
@@ -245,9 +241,9 @@ bool FunctionParsersManager::loadFuncListFromXmlTree(LangType lType, const gener
 	return true;
 }
 
-bool FunctionParsersManager::getOverrideMapFromXmlTree()
+bool FunctionParsersManager::getOverrideMapFromXmlTree(generic_string & xmlDirPath)
 {
-	generic_string funcListRulePath = _xmlDirPath;
+	generic_string funcListRulePath = xmlDirPath;
 	funcListRulePath += TEXT("\\overrideMap.xml");
 	
 	TiXmlDocument xmlFuncListDoc(funcListRulePath);
@@ -325,7 +321,9 @@ FunctionParser * FunctionParsersManager::getParser(const AssociationInfo & assoI
 				else
 				{
 					// load it
-					if (loadFuncListFromXmlTree(static_cast<LangType>(assoInfo._langID), _parsers[assoInfo._langID]->_id))
+					if (loadFuncListFromXmlTree(_xmlDirPath, static_cast<LangType>(assoInfo._langID), _parsers[assoInfo._langID]->_id))
+						return _parsers[assoInfo._langID]->_parser;
+					else if (_xmlDirPath != _xmlDirInstalledPath && !_xmlDirInstalledPath.empty() && loadFuncListFromXmlTree(_xmlDirInstalledPath, static_cast<LangType>(assoInfo._langID), _parsers[assoInfo._langID]->_id))
 						return _parsers[assoInfo._langID]->_parser;
 				}
 			}
@@ -333,7 +331,9 @@ FunctionParser * FunctionParsersManager::getParser(const AssociationInfo & assoI
 			{
 				_parsers[assoInfo._langID] = new ParserInfo;
 				// load it
-				if (loadFuncListFromXmlTree(static_cast<LangType>(assoInfo._langID), _parsers[assoInfo._langID]->_id))
+				if (loadFuncListFromXmlTree(_xmlDirPath, static_cast<LangType>(assoInfo._langID), _parsers[assoInfo._langID]->_id))
+					return _parsers[assoInfo._langID]->_parser;
+				else if (_xmlDirPath != _xmlDirInstalledPath && !_xmlDirInstalledPath.empty() && loadFuncListFromXmlTree(_xmlDirInstalledPath, static_cast<LangType>(assoInfo._langID), _parsers[assoInfo._langID]->_id))
 					return _parsers[assoInfo._langID]->_parser;
 
 				return nullptr;
@@ -357,7 +357,9 @@ FunctionParser * FunctionParsersManager::getParser(const AssociationInfo & assoI
 					else
 					{
 						// load it
-						if (loadFuncListFromXmlTree(static_cast<LangType>(assoInfo._langID), _parsers[i]->_id, i))
+						if (loadFuncListFromXmlTree(_xmlDirPath, static_cast<LangType>(assoInfo._langID), _parsers[i]->_id, i))
+							return _parsers[i]->_parser;
+						else if (_xmlDirPath != _xmlDirInstalledPath && !_xmlDirInstalledPath.empty() && loadFuncListFromXmlTree(_xmlDirInstalledPath, static_cast<LangType>(assoInfo._langID), _parsers[i]->_id, i))
 							return _parsers[i]->_parser;
 					}
 
@@ -371,7 +373,7 @@ FunctionParser * FunctionParsersManager::getParser(const AssociationInfo & assoI
 
 	}
 
-	return NULL;
+	return nullptr;
 }
 
 
@@ -423,7 +425,7 @@ void FunctionParser::funcParse(std::vector<foundInfo> & foundInfos, size_t begin
 				fi._pos = foundPos;
 			}
 
-			if (not classStructName.empty())
+			if (!classStructName.empty())
 			{
 				fi._data2 = classStructName;
 				fi._pos2 = -1; // change -1 valeur for validated data2
@@ -583,7 +585,7 @@ void FunctionZoneParser::classParse(vector<foundInfo> & foundInfos, vector< pair
 		generic_string classStructName = parseSubLevel(targetStart, targetEnd, _classNameExprArray, foundPos, ppEditView);
 		
 
-		if (not _openSymbole.empty() && not _closeSymbole.empty())
+		if (!_openSymbole.empty() && !_closeSymbole.empty())
 		{
 			targetEnd = static_cast<int32_t>(getBodyClosePos(targetEnd, _openSymbole.c_str(), _closeSymbole.c_str(), commentZones, ppEditView));
 		}

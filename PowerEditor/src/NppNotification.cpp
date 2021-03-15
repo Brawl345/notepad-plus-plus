@@ -1,29 +1,18 @@
 // This file is part of Notepad++ project
-// Copyright (C)2020 Don HO <don.h@free.fr>
-//
-// This program is free software; you can redistribute it and/or
-// modify it under the terms of the GNU General Public License
-// as published by the Free Software Foundation; either
-// version 2 of the License, or (at your option) any later version.
-//
-// Note that the GPL places important restrictions on "derived works", yet
-// it does not provide a detailed definition of that term.  To avoid
-// misunderstandings, we consider an application to constitute a
-// "derivative work" for the purpose of this license if it does any of the
-// following:
-// 1. Integrates source code from Notepad++.
-// 2. Integrates/includes/aggregates Notepad++ into a proprietary executable
-//    installer, such as those produced by InstallShield.
-// 3. Links to a library or executes a program that does any of the above.
+// Copyright (C)2021 Don HO <don.h@free.fr>
+
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// at your option any later version.
 //
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with this program; if not, write to the Free Software
-// Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
 
@@ -57,7 +46,7 @@ BOOL Notepad_plus::notify(SCNotification *notification)
 	{
 		case SCN_MODIFIED:
 		{
-			if (not notifyView)
+			if (!notifyView)
 				return FALSE;
 
 			static bool prevWasEdit = false;
@@ -560,7 +549,7 @@ BOOL Notepad_plus::notify(SCNotification *notification)
 			_tabPopupMenu.checkItem(IDM_EDIT_SETREADONLY, isUserReadOnly);
 
 			bool isSysReadOnly = buf->getFileReadOnly();
-			_tabPopupMenu.enableItem(IDM_EDIT_SETREADONLY, not isSysReadOnly && not buf->isMonitoringOn());
+			_tabPopupMenu.enableItem(IDM_EDIT_SETREADONLY, !isSysReadOnly && !buf->isMonitoringOn());
 			_tabPopupMenu.enableItem(IDM_EDIT_CLEARREADONLY, isSysReadOnly);
 
 			bool isFileExisting = PathFileExists(buf->getFullPathName()) != FALSE;
@@ -670,7 +659,7 @@ BOOL Notepad_plus::notify(SCNotification *notification)
 
 		case SCN_DOUBLECLICK:
 		{
-			if (not notifyView)
+			if (!notifyView)
 				return FALSE;
 
 			if (notification->modifiers == SCMOD_CTRL)
@@ -821,10 +810,13 @@ BOOL Notepad_plus::notify(SCNotification *notification)
 			{ // Double click with no modifiers
 				// Check wether cursor is within URL
 				auto indicMsk = notifyView->execute(SCI_INDICATORALLONFOR, notification->position);
-				if (!(indicMsk & (1 << URL_INDIC))) break;
+				if (!(indicMsk & (1 << URL_INDIC)))
+					break;
+				
 				auto startPos = notifyView->execute(SCI_INDICATORSTART, URL_INDIC, notification->position);
 				auto endPos = notifyView->execute(SCI_INDICATOREND, URL_INDIC, notification->position);
-				if ((notification->position < startPos) || (notification->position > endPos)) break;
+				if ((notification->position < startPos) || (notification->position > endPos))
+					break;
 
 				// WM_LBUTTONUP goes to opening browser instead of Scintilla here, because the mouse is not captured.
 				// The missing message causes mouse cursor flicker as soon as the mouse cursor is moved to a position outside the text editing area.
@@ -843,7 +835,7 @@ BOOL Notepad_plus::notify(SCNotification *notification)
 
 		case SCN_UPDATEUI:
 		{
-			if (not notifyView)
+			if (!notifyView)
 				return FALSE;
 
 			NppParameters& nppParam = NppParameters::getInstance();
@@ -970,7 +962,7 @@ BOOL Notepad_plus::notify(SCNotification *notification)
 
 		case SCN_ZOOM:
 		{
-			if (not notifyView)
+			if (!notifyView)
 				return FALSE;
 
 			ScintillaEditView * unfocusView = isFromPrimary ? &_subEditView : &_mainEditView;
@@ -993,7 +985,7 @@ BOOL Notepad_plus::notify(SCNotification *notification)
 
 		case SCN_PAINTED:
 		{
-			if (not notifyView)
+			if (!notifyView)
 				return FALSE;
 
 			// Check if a restore position is needed. 
@@ -1014,7 +1006,9 @@ BOOL Notepad_plus::notify(SCNotification *notification)
 				_subEditView.restoreCurrentPosPreStep();
 				_subEditView.setWrapRestoreNeeded(false);
 			}
+
 			notifyView->updateLineNumberWidth();
+
 			if (_syncInfo.doSync())
 				doSynScorll(HWND(notification->nmhdr.hwndFrom));
 
@@ -1027,7 +1021,7 @@ BOOL Notepad_plus::notify(SCNotification *notification)
 				_linkTriggered = false;
 			}
 
-			if (_pDocMap && (not _pDocMap->isClosed()) && _pDocMap->isVisible() && not _pDocMap->isTemporarilyShowing())
+			if (_pDocMap && (!_pDocMap->isClosed()) && _pDocMap->isVisible() && !_pDocMap->isTemporarilyShowing())
 			{
 				_pDocMap->wrapMap();
 				_pDocMap->scrollMap();

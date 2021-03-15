@@ -1,29 +1,18 @@
 // This file is part of Notepad++ project
-// Copyright (C)2020 Don HO <don.h@free.fr>
-//
-// This program is free software; you can redistribute it and/or
-// modify it under the terms of the GNU General Public License
-// as published by the Free Software Foundation; either
-// version 2 of the License, or (at your option) any later version.
-//
-// Note that the GPL places important restrictions on "derived works", yet
-// it does not provide a detailed definition of that term.  To avoid
-// misunderstandings, we consider an application to constitute a
-// "derivative work" for the purpose of this license if it does any of the
-// following:
-// 1. Integrates source code from Notepad++.
-// 2. Integrates/includes/aggregates Notepad++ into a proprietary executable
-//	installer, such as those produced by InstallShield.
-// 3. Links to a library or executes a program that does any of the above.
+// Copyright (C)2021 Don HO <don.h@free.fr>
+
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// at your option any later version.
 //
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with this program; if not, write to the Free Software
-// Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
@@ -203,8 +192,11 @@ struct Session
 	size_t _activeView = 0;
 	size_t _activeMainIndex = 0;
 	size_t _activeSubIndex = 0;
+	bool _includeFileBrowser = false;
+	generic_string _fileBrowserSelectedItem;
 	std::vector<sessionFileInfo> _mainViewFiles;
 	std::vector<sessionFileInfo> _subViewFiles;
+	std::vector<generic_string> _fileBrowserRoots;
 };
 
 
@@ -231,6 +223,7 @@ struct CmdLineParams
 
 	LangType _langType = L_EXTERNAL;
 	generic_string _localizationPath;
+
 	generic_string _easterEggName;
 	unsigned char _quoteType = '\0';
 	int _ghostTypingSpeed = -1; // -1: initial value  1: slow  2: fast  3: speed of light
@@ -822,7 +815,7 @@ struct NppGUI final
 	bool _rememberLastSession = true; // remember next session boolean will be written in the settings
 	bool _isCmdlineNosessionActivated = false; // used for if -nosession is indicated on the launch time
 	bool _detectEncoding = true;
-	bool _setSaveDlgExtFiltToAllTypesForNormText = false;
+	bool _setSaveDlgExtFiltToAllTypes = false;
 	bool _doTaskList = true;
 	bool _maitainIndent = true;
 	bool _enableSmartHilite = true;
@@ -845,10 +838,12 @@ struct NppGUI final
 	bool _monospacedFontFindDlg = false;
 	bool _findDlgAlwaysVisible = false;
 	bool _confirmReplaceInAllOpenDocs = true;
+	bool _muteSounds = false;
 	writeTechnologyEngine _writeTechnologyEngine = defaultTechnology;
 	bool _isWordCharDefault = true;
 	std::string _customWordChars;
 	urlMode _styleURL = urlUnderLineFg;
+	generic_string _uriSchemes = TEXT("svn:// cvs:// git:// imap:// irc:// irc6:// ircs:// ldap:// ldaps:// news: telnet:// gopher:// ssh:// sftp:// smb:// skype: snmp:// spotify: steam:// sms: slack:// chrome:// bitcoin:");
 	NewDocDefaultSettings _newDocDefaultSettings;
 
 
@@ -903,7 +898,6 @@ struct NppGUI final
 	size_t _snapshotBackupTiming = 7000;
 	generic_string _cloudPath; // this option will never be read/written from/to config.xml
 	unsigned char _availableClouds = '\0'; // this option will never be read/written from/to config.xml
-	bool _useNewStyleSaveDlg = true;
 
 	enum SearchEngineChoice{ se_custom = 0, se_duckDuckGo = 1, se_google = 2, se_bing = 3, se_yahoo = 4, se_stackoverflow = 5 };
 	SearchEngineChoice _searchEngineChoice = se_google;
@@ -918,6 +912,7 @@ struct NppGUI final
 struct ScintillaViewParams
 {
 	bool _lineNumberMarginShow = true;
+	bool _lineNumberMarginDynamicWidth = true;
 	bool _bookMarkMarginShow = true;
 	folderStyle  _folderStyle = FOLDER_STYLE_BOX; //"simple", "arrow", "circle", "box" and "none"
 	lineWrapMethod _lineWrapMethod = LINEWRAP_ALIGNED;
@@ -934,7 +929,7 @@ struct ScintillaViewParams
 	bool _whiteSpaceShow = false;
 	bool _eolShow = false;
 	int _borderWidth = 2;
-	bool _scrollBeyondLastLine = false;
+	bool _scrollBeyondLastLine = true;
 	bool _rightClickKeepsSelection = false;
 	bool _disableAdvancedScrolling = false;
 	bool _doSmoothFont = false;
@@ -1170,6 +1165,9 @@ struct FindHistory final
 
 	bool _isFifRecuisive = true;
 	bool _isFifInHiddenFolder = false;
+    bool _isFifProjectPanel_1 = false;
+    bool _isFifProjectPanel_2 = false;
+    bool _isFifProjectPanel_3 = false;
 
 	searchMode _searchMode = normal;
 	transparencyMode _transparencyMode = onLossingFocus;
@@ -1580,6 +1578,7 @@ public:
 		generic_string _find;
 		generic_string _replace;
 		generic_string _findInFiles;
+		generic_string _findInProjects;
 		generic_string _mark;
 	};
 
@@ -1669,13 +1668,10 @@ public:
 		_currentDefaultFgColor = c;
 	}
 
-	bool useNewStyleSaveDlg() const {
-		return _nppGUI._useNewStyleSaveDlg;
-	}
+	void setCmdSettingsDir(const generic_string& settingsDir) {
+		_cmdSettingsDir = settingsDir;
+	};
 
-	void setUseNewStyleSaveDlg(bool v) {
-		_nppGUI._useNewStyleSaveDlg = v;
-	}
 	DPIManager _dpiManager;
 
 	generic_string static getSpecialFolderLocation(int folderKind);
@@ -1704,7 +1700,6 @@ private:
 	std::vector<UdlXmlFileState> _pXmlUserLangsDoc;
 	TiXmlDocument *_pXmlToolIconsDoc = nullptr;
 	TiXmlDocument *_pXmlShortcutDoc = nullptr;
-	TiXmlDocument *_pXmlSessionDoc = nullptr;
 	TiXmlDocument *_pXmlBlacklistDoc = nullptr;
 
 	TiXmlDocumentA *_pXmlNativeLangDocA = nullptr;
@@ -1714,7 +1709,7 @@ private:
 
 	NppGUI _nppGUI;
 	ScintillaViewParams _svp;
-	Lang *_langList[NB_LANG];
+	Lang *_langList[NB_LANG] = {};
 	int _nbLang = 0;
 
 	// Recent File History
@@ -1753,6 +1748,8 @@ private:
 	WNDPROC _enableThemeDialogTextureFuncAddr = nullptr;
 	bool _isLocal;
 	bool _isx64 = false; // by default 32-bit
+
+	generic_string _cmdSettingsDir;
 
 public:
 	void setShortcutDirty() { _isAnyShortcutModified = true; };
@@ -1844,7 +1841,7 @@ private:
 	bool getUserCmdsFromXmlTree();
 	bool getPluginCmdsFromXmlTree();
 	bool getScintKeysFromXmlTree();
-	bool getSessionFromXmlTree(TiXmlDocument *pSessionDoc = NULL, Session *session = NULL);
+	bool getSessionFromXmlTree(TiXmlDocument *pSessionDoc, Session& session);
 	bool getBlackListFromXmlTree();
 
 	void feedGUIParameters(TiXmlNode *node);
